@@ -1,0 +1,13 @@
+[package]
+name = "triangle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sikhar-core = { path = "../../crates/sikhar-core" }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+bytemuck = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }

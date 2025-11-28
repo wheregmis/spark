@@ -1,0 +1,551 @@
+//! Application runner and main event loop.
+
+use sikhar_core::{init_wgpu, Color, SurfaceState};
+use sikhar_input::{FocusManager, InputEvent, PointerButton};
+use sikhar_layout::LayoutTree;
+use sikhar_render::{DrawList, Renderer};
+use sikhar_text::TextSystem;
+use sikhar_widgets::{EventContext, PaintContext, Widget};
+use wgpu::{Device, Queue};
+use winit::event::WindowEvent;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+
+/// Application configuration.
+pub struct AppConfig {
+    /// Window title.
+    pub title: String,
+    /// Initial window width.
+    pub width: u32,
+    /// Initial window height.
+    pub height: u32,
+    /// Background color.
+    pub background: Color,
+    /// Enable VSync.
+    pub vsync: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            title: String::from("Sikhar App"),
+            width: 800,
+            height: 600,
+            background: Color::from_hex(0xF3F4F6),
+            vsync: true,
+        }
+    }
+}
+
+/// The main application struct.
+pub struct App {
+    config: AppConfig,
+}
+
+impl App {
+    /// Create a new app with default configuration.
+    pub fn new() -> Self {
+        Self {
+            config: AppConfig::default(),
+        }
+    }
+
+    /// Set the window title.
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.config.title = title.into();
+        self
+    }
+
+    /// Set the initial window size.
+    pub fn with_size(mut self, width: u32, height: u32) -> Self {
+        self.config.width = width;
+        self.config.height = height;
+        self
+    }
+
+    /// Set the background color.
+    pub fn with_background(mut self, color: Color) -> Self {
+        self.config.background = color;
+        self
+    }
+
+    /// Run the application with the given root widget.
+    pub fn run<F>(self, build_ui: F) -> !
+    where
+        F: FnOnce() -> Box<dyn Widget> + 'static,
+    {
+        let event_loop = winit::event_loop::EventLoop::new().unwrap();
+        let runner = AppRunner::new(self.config, build_ui);
+        let runner_leaked: &'static mut AppRunner<F> = Box::leak(Box::new(runner));
+        event_loop.run_app(runner_leaked).unwrap();
+        std::process::exit(0);
+    }
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Internal application runner that handles the event loop.
+struct AppRunner<F: FnOnce() -> Box<dyn Widget>> {
+    config: AppConfig,
+    build_ui: Option<F>,
+    state: Option<AppState>,
+}
+
+struct AppState {
+    device: Device,
+    queue: Queue,
+    surface_state: SurfaceState<'static>,
+    renderer: Renderer,
+    text_system: TextSystem,
+    draw_list: DrawList,
+    layout_tree: LayoutTree,
+    focus_manager: FocusManager,
+    root_widget: Box<dyn Widget>,
+    start_time: Instant,
+    mouse_pos: glam::Vec2,
+    scale_factor: f32,
+    needs_layout: bool,
+    needs_repaint: bool,
+}
+
+impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
+    fn new(config: AppConfig, build_ui: F) -> Self {
+        Self {
+            config,
+            build_ui: Some(build_ui),
+            state: None,
+        }
+    }
+
+    fn build_layout(&mut self) {
+        let state = self.state.as_mut().unwrap();
+
+        // Clear layout tree
+        state.layout_tree = LayoutTree::new();
+
+        // Build layout tree from widget tree
+        fn add_to_layout(
+            widget: &mut dyn Widget,
+            tree: &mut LayoutTree,
+        ) -> sikhar_layout::WidgetId {
+            let style = widget.style();
+            let children_ids: Vec<_> = widget
+                .children_mut()
+                .iter_mut()
+                .map(|child| add_to_layout(child.as_mut(), tree))
+                .collect();
+
+            let id = if children_ids.is_empty() {
+                tree.new_leaf(style)
+            } else {
+                tree.new_with_children(style, &children_ids)
+            };
+
+            widget.set_id(id);
+            id
+        }
+
+        let root_id = add_to_layout(state.root_widget.as_mut(), &mut state.layout_tree);
+        state.layout_tree.set_root(root_id);
+
+        // Compute layout
+        let size = state.surface_state.size;
+        state
+            .layout_tree
+            .compute_layout(size.width as f32, size.height as f32);
+
+        state.needs_layout = false;
+        state.needs_repaint = true;
+    }
+
+    fn paint(&mut self) {
+        let state = self.state.as_mut().unwrap();
+        state.draw_list.clear();
+
+        // Paint widgets
+        fn paint_widget(
+            widget: &dyn Widget,
+            layout_tree: &LayoutTree,
+            focus: &FocusManager,
+            draw_list: &mut DrawList,
+            scale_factor: f32,
+        ) {
+            let id = widget.id();
+            if let Some(layout) = layout_tree.get_absolute_layout(id) {
+                let mut ctx = PaintContext {
+                    draw_list,
+                    layout,
+                    focus,
+                    widget_id: id,
+                    scale_factor,
+                };
+                widget.paint(&mut ctx);
+
+                // Paint children
+                for child in widget.children() {
+                    paint_widget(
+                        child.as_ref(),
+                        layout_tree,
+                        focus,
+                        ctx.draw_list,
+                        scale_factor,
+                    );
+                }
+            }
+        }
+
+        paint_widget(
+            state.root_widget.as_ref(),
+            &state.layout_tree,
+            &state.focus_manager,
+            &mut state.draw_list,
+            state.scale_factor,
+        );
+
+        state.needs_repaint = false;
+    }
+
+    fn handle_event(&mut self, event: InputEvent) {
+        let state = self.state.as_mut().unwrap();
+
+        // Simple event dispatch - dispatch to all widgets, let them check bounds
+        fn dispatch_event(
+            widget: &mut dyn Widget,
+            layout_tree: &LayoutTree,
+            focus_id: Option<sikhar_layout::WidgetId>,
+            event: &InputEvent,
+        ) -> (sikhar_widgets::EventResponse, Option<sikhar_layout::WidgetId>) {
+            let id = widget.id();
+            let layout = match layout_tree.get_absolute_layout(id) {
+                Some(l) => l,
+                None => {
+                    return (sikhar_widgets::EventResponse::default(), focus_id);
+                }
+            };
+
+            // First dispatch to children (bubble up)
+            let mut new_focus = focus_id;
+            for child in widget.children_mut() {
+                let (response, focus) = dispatch_event(child.as_mut(), layout_tree, new_focus, event);
+                new_focus = focus;
+                if response.handled {
+                    return (response, new_focus);
+                }
+            }
+
+            // Create a temporary focus manager for this dispatch
+            let mut temp_focus = FocusManager::new();
+            if let Some(fid) = new_focus {
+                temp_focus.set_focus(fid);
+            }
+
+            let mut ctx = EventContext {
+                layout,
+                layout_tree,
+                focus: &mut temp_focus,
+                widget_id: id,
+                has_capture: false,
+            };
+
+            let response = widget.event(&mut ctx, event);
+            
+            // Update focus
+            if response.request_focus {
+                new_focus = Some(id);
+            } else if response.release_focus && new_focus == Some(id) {
+                new_focus = None;
+            }
+
+            (response, new_focus)
+        }
+
+        let current_focus = state.focus_manager.focused();
+        let (response, new_focus) = dispatch_event(
+            state.root_widget.as_mut(),
+            &state.layout_tree,
+            current_focus,
+            &event,
+        );
+
+        // Update focus manager
+        if let Some(fid) = new_focus {
+            state.focus_manager.set_focus(fid);
+        } else if current_focus.is_some() && new_focus.is_none() {
+            state.focus_manager.clear_focus();
+        }
+
+        if response.repaint {
+            state.needs_repaint = true;
+        }
+        if response.relayout {
+            state.needs_layout = true;
+        }
+    }
+}
+
+impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for AppRunner<F> {
+    fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
+        let window = event_loop
+            .create_window(
+                winit::window::WindowAttributes::default()
+                    .with_title(&self.config.title)
+                    .with_surface_size(winit::dpi::LogicalSize::new(
+                        self.config.width,
+                        self.config.height,
+                    )),
+            )
+            .expect("create window");
+
+        let window_leaked: &'static mut Box<dyn winit::window::Window> =
+            Box::leak(Box::new(window));
+        let window: &'static dyn winit::window::Window = &**window_leaked;
+
+        // Initialize wgpu - use pollster on native, web handles this specially
+        let (device, queue, surface_state) = pollster::block_on(init_wgpu(window));
+
+        let renderer = Renderer::new(&device, surface_state.config.format);
+        let text_system = TextSystem::new(&device);
+        let draw_list = DrawList::new();
+        let layout_tree = LayoutTree::new();
+        let focus_manager = FocusManager::new();
+
+        // Build the UI
+        let build_ui = self.build_ui.take().expect("build_ui already called");
+        let root_widget = build_ui();
+
+        let scale_factor = window.scale_factor() as f32;
+
+        self.state = Some(AppState {
+            device,
+            queue,
+            surface_state,
+            renderer,
+            text_system,
+            draw_list,
+            layout_tree,
+            focus_manager,
+            root_widget,
+            start_time: Instant::now(),
+            mouse_pos: glam::Vec2::ZERO,
+            scale_factor,
+            needs_layout: true,
+            needs_repaint: true,
+        });
+
+        // Build initial layout
+        self.build_layout();
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &dyn winit::event_loop::ActiveEventLoop,
+        _id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::SurfaceResized(size) => {
+                if let Some(state) = self.state.as_mut() {
+                    if size.width > 0 && size.height > 0 {
+                        state
+                            .surface_state
+                            .resize(&state.device, size.width, size.height);
+                        state.needs_layout = true;
+                    }
+                }
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(state) = self.state.as_mut() {
+                    state.scale_factor = scale_factor as f32;
+                    state.needs_layout = true;
+                }
+            }
+            WindowEvent::PointerMoved { position, .. } => {
+                let pos = glam::Vec2::new(position.x as f32, position.y as f32);
+                if let Some(s) = self.state.as_mut() {
+                    s.mouse_pos = pos;
+                }
+                self.handle_event(InputEvent::PointerMove { pos });
+            }
+            WindowEvent::PointerButton {
+                state: btn_state,
+                button,
+                ..
+            } => {
+                let pos = self.state.as_ref().map(|s| s.mouse_pos).unwrap_or_default();
+                let button = match button {
+                    winit::event::ButtonSource::Mouse(mb) => match mb {
+                        winit::event::MouseButton::Left => PointerButton::Primary,
+                        winit::event::MouseButton::Right => PointerButton::Secondary,
+                        winit::event::MouseButton::Middle => PointerButton::Auxiliary,
+                        _ => PointerButton::Primary,
+                    },
+                    _ => PointerButton::Primary,
+                };
+
+                match btn_state {
+                    winit::event::ElementState::Pressed => {
+                        self.handle_event(InputEvent::PointerDown { pos, button });
+                    }
+                    winit::event::ElementState::Released => {
+                        self.handle_event(InputEvent::PointerUp { pos, button });
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let pos = self.state.as_ref().map(|s| s.mouse_pos).unwrap_or_default();
+                let delta = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => glam::Vec2::new(x, y),
+                    winit::event::MouseScrollDelta::PixelDelta(p) => {
+                        glam::Vec2::new(p.x as f32 / 20.0, p.y as f32 / 20.0)
+                    }
+                };
+                self.handle_event(InputEvent::Scroll { pos, delta });
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                use sikhar_input::{ui_events::keyboard::Code, Key, KeyboardEvent, NamedKey};
+
+                let key = match &event.logical_key {
+                    winit::keyboard::Key::Character(c) => Key::Character(c.to_string()),
+                    winit::keyboard::Key::Named(named) => {
+                        use winit::keyboard::NamedKey as WN;
+                        Key::Named(match named {
+                            WN::Enter => NamedKey::Enter,
+                            WN::Tab => NamedKey::Tab,
+                            WN::Backspace => NamedKey::Backspace,
+                            WN::Delete => NamedKey::Delete,
+                            WN::Escape => NamedKey::Escape,
+                            WN::ArrowUp => NamedKey::ArrowUp,
+                            WN::ArrowDown => NamedKey::ArrowDown,
+                            WN::ArrowLeft => NamedKey::ArrowLeft,
+                            WN::ArrowRight => NamedKey::ArrowRight,
+                            WN::Home => NamedKey::Home,
+                            WN::End => NamedKey::End,
+                            WN::PageUp => NamedKey::PageUp,
+                            WN::PageDown => NamedKey::PageDown,
+                            _ => return,
+                        })
+                    }
+                    _ => return,
+                };
+
+                // Use a generic code since we're translating from logical key
+                let code = Code::Unidentified;
+
+                let kb_event = if event.state.is_pressed() {
+                    KeyboardEvent::key_down(key.clone(), code)
+                } else {
+                    KeyboardEvent::key_up(key, code)
+                };
+
+                if event.state.is_pressed() {
+                    self.handle_event(InputEvent::KeyDown { event: kb_event });
+                } else {
+                    self.handle_event(InputEvent::KeyUp { event: kb_event });
+                }
+
+                // Handle text input
+                if event.state.is_pressed() && !event.repeat {
+                    if let Some(text) = event.text.as_ref() {
+                        let text = text.to_string();
+                        if !text.is_empty() && text.chars().all(|c| !c.is_control()) {
+                            self.handle_event(InputEvent::TextInput { text });
+                        }
+                    }
+                }
+            }
+            WindowEvent::Focused(focused) => {
+                if focused {
+                    self.handle_event(InputEvent::FocusGained);
+                } else {
+                    self.handle_event(InputEvent::FocusLost);
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                let state = self.state.as_mut().unwrap();
+
+                if state.needs_layout {
+                    self.build_layout();
+                }
+
+                let state = self.state.as_mut().unwrap();
+                if state.needs_repaint {
+                    self.paint();
+                }
+
+                let state = self.state.as_mut().unwrap();
+
+                // Update renderer
+                let size = state.surface_state.size;
+                state
+                    .renderer
+                    .set_viewport(size.width as f32, size.height as f32, state.scale_factor);
+                state
+                    .renderer
+                    .set_time(state.start_time.elapsed().as_secs_f32());
+
+                // Prepare render
+                state.renderer.prepare(
+                    &state.device,
+                    &state.queue,
+                    &state.draw_list,
+                    state.text_system.atlas(),
+                );
+
+                // Get frame
+                let frame = match state.surface_state.surface.get_current_texture() {
+                    Ok(frame) => frame,
+                    Err(_) => {
+                        state.surface_state.reconfigure(&state.device);
+                        state
+                            .surface_state
+                            .surface
+                            .get_current_texture()
+                            .unwrap()
+                    }
+                };
+
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+
+                let mut encoder = state
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("sikhar_encoder"),
+                    });
+
+                let bg = self.config.background;
+                state.renderer.render(
+                    &mut encoder,
+                    &view,
+                    wgpu::Color {
+                        r: bg.r as f64,
+                        g: bg.g as f64,
+                        b: bg.b as f64,
+                        a: bg.a as f64,
+                    },
+                );
+
+                state.queue.submit(Some(encoder.finish()));
+                frame.present();
+            }
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &dyn winit::event_loop::ActiveEventLoop) {
+        // Request redraw for animation
+        // In a real app, you'd only request this when needed
+    }
+}
