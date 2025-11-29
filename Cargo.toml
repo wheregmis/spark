@@ -6,10 +6,12 @@ members = [
     "crates/sikhar-text",
     "crates/sikhar-input",
     "crates/sikhar-widgets",
+    "crates/sikhar-native-apple",
     "crates/sikhar",
     "examples/triangle",
     "examples/demo",
     "examples/counter",
+    "examples/native-demo",
     "run-wasm",
 ]
 resolver = "2"
@@ -47,11 +49,16 @@ sikhar-layout = { path = "crates/sikhar-layout" }
 sikhar-text = { path = "crates/sikhar-text" }
 sikhar-input = { path = "crates/sikhar-input" }
 sikhar-widgets = { path = "crates/sikhar-widgets" }
+sikhar-native-apple = { path = "crates/sikhar-native-apple" }
 
 # Web dependencies (add to workspace.dependencies for individual crates)
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Window", "Document", "HtmlCanvasElement"] }
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+] }
 console_error_panic_hook = "0.1"
 
 [profile.release]

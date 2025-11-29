@@ -4,6 +4,7 @@ use crate::{EventContext, EventResponse, PaintContext, Widget};
 use sikhar_core::Color;
 use sikhar_input::InputEvent;
 use sikhar_layout::WidgetId;
+use sikhar_text::TextStyle;
 use taffy::prelude::*;
 
 /// Visual state of the button.
@@ -31,6 +32,10 @@ pub struct ButtonStyle {
     pub padding_h: f32,
     pub padding_v: f32,
     pub font_size: f32,
+    /// Minimum width (0 = auto based on content)
+    pub min_width: f32,
+    /// Minimum height (0 = auto based on content)  
+    pub min_height: f32,
 }
 
 impl Default for ButtonStyle {
@@ -48,6 +53,8 @@ impl Default for ButtonStyle {
             padding_h: 16.0,
             padding_v: 8.0,
             font_size: 14.0,
+            min_width: 0.0,  // Will be set based on label
+            min_height: 0.0, // Will be set based on font_size
         }
     }
 }
@@ -64,10 +71,26 @@ pub struct Button {
 impl Button {
     /// Create a new button with the given label.
     pub fn new(label: impl Into<String>) -> Self {
+        let label = label.into();
+        let style = ButtonStyle::default();
+        
+        // Estimate minimum size based on label and style
+        // Rough estimate: ~8px per character for 14px font, plus padding
+        let char_width = style.font_size * 0.6;
+        let estimated_text_width = label.len() as f32 * char_width;
+        let min_width = estimated_text_width + style.padding_h * 2.0;
+        
+        // Height: font size * line height (~1.4) + vertical padding
+        let min_height = style.font_size * 1.4 + style.padding_v * 2.0;
+        
         Self {
             id: WidgetId::default(),
-            label: label.into(),
-            style: ButtonStyle::default(),
+            label,
+            style: ButtonStyle {
+                min_width,
+                min_height,
+                ..style
+            },
             state: ButtonState::Normal,
             on_click: None,
         }
@@ -139,6 +162,10 @@ impl Widget for Button {
 
     fn style(&self) -> Style {
         Style {
+            min_size: Size {
+                width: length(self.style.min_width),
+                height: length(self.style.min_height),
+            },
             padding: Rect {
                 left: length(self.style.padding_h),
                 right: length(self.style.padding_h),
@@ -154,7 +181,8 @@ impl Widget for Button {
     fn paint(&self, ctx: &mut PaintContext) {
         let bounds = ctx.bounds();
         let bg = self.current_background();
-        let _text_color = self.current_text_color();
+        let text_color = self.current_text_color();
+        let scale = ctx.scale_factor;
 
         // Draw button background
         if self.style.border_width > 0.0 {
@@ -169,13 +197,14 @@ impl Widget for Button {
             ctx.fill_rounded_rect(bounds, bg, self.style.corner_radius);
         }
 
-        // Focus ring
+        // Focus ring (scale offset for HiDPI)
         if ctx.has_focus() {
+            let offset = 2.0 * scale;
             let focus_bounds = sikhar_core::Rect::new(
-                bounds.x - 2.0,
-                bounds.y - 2.0,
-                bounds.width + 4.0,
-                bounds.height + 4.0,
+                bounds.x - offset,
+                bounds.y - offset,
+                bounds.width + offset * 2.0,
+                bounds.height + offset * 2.0,
             );
             ctx.fill_bordered_rect(
                 focus_bounds,
@@ -186,9 +215,11 @@ impl Widget for Button {
             );
         }
 
-        // Text rendering is handled separately via TextSystem
-        // For now, we just mark where text would be drawn
-        // The actual text rendering will be done by the App runner
+        // Draw the button label text, centered
+        let text_style = TextStyle::default()
+            .with_size(self.style.font_size)
+            .with_color(text_color);
+        ctx.draw_text_centered(&self.label, &text_style, bounds);
     }
 
     fn event(&mut self, ctx: &mut EventContext, event: &InputEvent) -> EventResponse {
@@ -253,7 +284,6 @@ impl Widget for Button {
     }
 
     fn measure(&self, ctx: &mut crate::LayoutContext) -> Option<(f32, f32)> {
-        use sikhar_text::TextStyle;
         let style = TextStyle::default().with_size(self.style.font_size);
         let (w, h) = ctx.text.measure(&self.label, &style, None);
         Some((

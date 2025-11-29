@@ -36,7 +36,8 @@ pub mod prelude {
     pub use sikhar_input::{InputEvent, Key, Modifiers, PointerButton};
     pub use sikhar_layout::taffy;
     pub use sikhar_widgets::{
-        Button, ButtonStyle, Container, EventResponse, Scroll, ScrollDirection, TextInput, Widget,
+        Button, ButtonStyle, Container, EventResponse, Scroll, ScrollDirection, Text, TextAlign,
+        TextInput, Widget,
     };
 }
 

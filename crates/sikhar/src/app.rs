@@ -9,6 +9,9 @@ use sikhar_widgets::{EventContext, PaintContext, Widget};
 use wgpu::{Device, Queue};
 use winit::event::WindowEvent;
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use sikhar_native_apple::ViewManager;
+
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
@@ -114,6 +117,8 @@ struct AppState {
     scale_factor: f32,
     needs_layout: bool,
     needs_repaint: bool,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    native_view_manager: Option<ViewManager>,
 }
 
 impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
@@ -131,6 +136,12 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         // Clear layout tree
         state.layout_tree = LayoutTree::new();
 
+        // Initialize native view manager if needed
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if state.native_view_manager.is_none() {
+            state.native_view_manager = Some(ViewManager::new());
+        }
+
         // Build layout tree from widget tree
         fn add_to_layout(
             widget: &mut dyn Widget,
@@ -140,7 +151,10 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
             let children_ids: Vec<_> = widget
                 .children_mut()
                 .iter_mut()
-                .map(|child| add_to_layout(child.as_mut(), tree))
+                .map(|child| add_to_layout(
+                    child.as_mut(),
+                    tree,
+                ))
                 .collect();
 
             let id = if children_ids.is_empty() {
@@ -152,15 +166,95 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
             widget.set_id(id);
             id
         }
+        
+        // Register native widgets after layout tree is built
+        // NOTE: This is a limitation - we can't easily detect native widgets from Box<dyn Widget>
+        // The registration happens by traversing the widget tree and checking type IDs
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        fn register_native_widgets(
+            widget: &mut dyn Widget,
+            manager: &mut ViewManager,
+        ) {
+            use std::any::{Any, TypeId};
+            use sikhar_native_apple::{NativeWidgetRegistration, widgets};
+            
+            let widget_id = widget.id();
+            // Get children before we try to downcast (to avoid move issues)
+            let children: Vec<*mut dyn Widget> = widget.children_mut().iter_mut().map(|c| c.as_mut() as *mut dyn Widget).collect();
+            
+            // Try to detect native widgets using is_native() method
+            // This is the proper way since we can't downcast Box<dyn Widget>
+            if widget.is_native() {
+                eprintln!("Found native widget with ID: {:?}", widget_id);
+                // Use the register_native method to register the widget
+                // This avoids the need for downcasting
+                widget.register_native(widget_id, &mut |id, ptr| {
+                    use sikhar_native_apple::NativeViewHandle;
+                    #[cfg(target_os = "macos")]
+                    {
+                        let view_handle = NativeViewHandle::AppKit(ptr as *mut objc2::runtime::AnyObject);
+                        manager.register_widget(id, view_handle);
+                    }
+                    #[cfg(target_os = "ios")]
+                    {
+                        let view_handle = NativeViewHandle::UIKit(ptr as *mut objc2::runtime::AnyObject);
+                        manager.register_widget(id, view_handle);
+                    }
+                });
+            }
+            
+            // Recursively register children
+            for child_ptr in children {
+                let child: &mut dyn Widget = unsafe { &mut *child_ptr };
+                register_native_widgets(child, manager);
+            }
+        }
 
-        let root_id = add_to_layout(state.root_widget.as_mut(), &mut state.layout_tree);
+        let root_id = add_to_layout(
+            state.root_widget.as_mut(),
+            &mut state.layout_tree,
+        );
         state.layout_tree.set_root(root_id);
 
         // Compute layout
+        // Use surface size - this should be in physical pixels
+        // But we need to convert to logical pixels for layout
         let size = state.surface_state.size;
+        let logical_width = (size.width as f32) / state.scale_factor;
+        let logical_height = (size.height as f32) / state.scale_factor;
         state
             .layout_tree
-            .compute_layout(size.width as f32, size.height as f32);
+            .compute_layout(logical_width, logical_height);
+        
+        // Store logical size for later use
+        let window_height_logical = logical_height;
+
+        // Register native widgets and update their layouts
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let Some(ref mut manager) = state.native_view_manager {
+            // Try to register native widgets
+            // Note: This won't work with trait objects - we need a different approach
+            // For now, native widgets must be registered manually or through type-specific code
+            register_native_widgets(state.root_widget.as_mut(), manager);
+            
+            use std::collections::HashMap;
+            let mut layouts = HashMap::new();
+            
+            // Collect all layouts for native widgets
+            state.layout_tree.traverse(|widget_id, computed, _depth| {
+                if manager.get_view(widget_id).is_some() {
+                    layouts.insert(widget_id, *computed);
+                }
+            });
+            
+            // Update layouts for registered native widgets
+            // The layout was computed with logical pixels, so parent_height should be logical too
+            manager.update_layouts(
+                &layouts,
+                window_height_logical,
+                state.scale_factor,
+            );
+        }
 
         state.needs_layout = false;
         state.needs_repaint = true;
@@ -170,22 +264,83 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         let state = self.state.as_mut().unwrap();
         state.draw_list.clear();
 
-        // Paint widgets
+        // Get elapsed time for animations
+        let elapsed_time = state.start_time.elapsed().as_secs_f32();
+
+        // We need to use raw pointers to pass mutable references through the recursive function
+        // This is safe because we control the lifetime and don't alias
+        let text_system_ptr = &mut state.text_system as *mut TextSystem;
+        let device_ptr = &state.device as *const Device;
+        let queue_ptr = &state.queue as *const Queue;
+
+        // Paint widgets (skip native widgets as they render themselves)
         fn paint_widget(
             widget: &dyn Widget,
             layout_tree: &LayoutTree,
             focus: &FocusManager,
             draw_list: &mut DrawList,
             scale_factor: f32,
+            text_system_ptr: *mut TextSystem,
+            device_ptr: *const Device,
+            queue_ptr: *const Queue,
+            elapsed_time: f32,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            native_view_manager: Option<&ViewManager>,
         ) {
             let id = widget.id();
+            
+            // Skip painting native widgets - they render themselves
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let Some(manager) = native_view_manager {
+                if manager.get_view(id).is_some() {
+                    // This is a native widget, skip GPU painting
+                    // Still paint children in case they're not native
+                    for child in widget.children() {
+                        paint_widget(
+                            child.as_ref(),
+                            layout_tree,
+                            focus,
+                            draw_list,
+                            scale_factor,
+                            text_system_ptr,
+                            device_ptr,
+                            queue_ptr,
+                            elapsed_time,
+                            #[cfg(any(target_os = "macos", target_os = "ios"))]
+                            Some(manager),
+                        );
+                    }
+                    return;
+                }
+            }
+
             if let Some(layout) = layout_tree.get_absolute_layout(id) {
+                // SAFETY: We control the lifetime and ensure no aliasing within this function
+                let text_system = unsafe { &mut *text_system_ptr };
+                let device = unsafe { &*device_ptr };
+                let queue = unsafe { &*queue_ptr };
+
+                // Scale layout bounds from logical to physical pixels
+                // Layout is computed in logical pixels, but renderer uses physical pixels
+                let scaled_layout = sikhar_layout::ComputedLayout::new(
+                    sikhar_core::Rect::new(
+                        layout.bounds.x * scale_factor,
+                        layout.bounds.y * scale_factor,
+                        layout.bounds.width * scale_factor,
+                        layout.bounds.height * scale_factor,
+                    )
+                );
+
                 let mut ctx = PaintContext {
                     draw_list,
-                    layout,
+                    layout: scaled_layout,
                     focus,
                     widget_id: id,
                     scale_factor,
+                    text_system,
+                    device,
+                    queue,
+                    elapsed_time,
                 };
                 widget.paint(&mut ctx);
 
@@ -197,6 +352,12 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
                         focus,
                         ctx.draw_list,
                         scale_factor,
+                        text_system_ptr,
+                        device_ptr,
+                        queue_ptr,
+                        elapsed_time,
+                        #[cfg(any(target_os = "macos", target_os = "ios"))]
+                        native_view_manager,
                     );
                 }
             }
@@ -208,6 +369,12 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
             &state.focus_manager,
             &mut state.draw_list,
             state.scale_factor,
+            text_system_ptr,
+            device_ptr,
+            queue_ptr,
+            elapsed_time,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            state.native_view_manager.as_ref(),
         );
 
         state.needs_repaint = false;
@@ -338,10 +505,99 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
             scale_factor,
             needs_layout: true,
             needs_repaint: true,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            native_view_manager: None,
         });
 
-        // Build initial layout
+        // Build initial layout (this registers native widgets)
         self.build_layout();
+        
+        // Embed native views into the window after layout
+        // This must happen after layout so widgets are registered
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            // Get all data we need before any mutable borrows
+            let (size, scale_factor, all_layouts) = {
+                let state = self.state.as_ref().unwrap();
+                let mut layouts = std::collections::HashMap::new();
+                state.layout_tree.traverse(|widget_id, computed, _depth| {
+                    layouts.insert(widget_id, *computed);
+                });
+                (state.surface_state.size, state.scale_factor, layouts)
+            };
+            
+            // Now get mutable access to manager
+            if let Some(ref mut manager) = self.state.as_mut().unwrap().native_view_manager {
+            // Embed native views into window - inline implementation
+            use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+            use objc2::runtime::AnyObject;
+            use sikhar_native_apple::ffi::appkit::NSView;
+            
+            #[cfg(target_os = "macos")]
+            {
+                // Get the raw window handle from winit
+                if let Ok(raw_handle) = window.raw_window_handle() {
+                    if let RawWindowHandle::AppKit(handle) = raw_handle {
+                        unsafe {
+                            // Get NSWindow from the handle
+                            // The ns_view field contains the content view
+                            let content_view_ptr: *mut AnyObject = handle.ns_view.as_ptr() as *mut AnyObject;
+                            
+                            if !content_view_ptr.is_null() {
+                                // Set the content view as the root view in the manager
+                                manager.set_root_view(sikhar_native_apple::NativeViewHandle::AppKit(content_view_ptr));
+                                
+                                // Create content view wrapper
+                                let content_view = NSView::from_ptr(content_view_ptr);
+                                
+                                // Add all registered native views to the content view
+                                let view_count = manager.get_all_views().len();
+                                for (_widget_id, view_handle) in manager.get_all_views() {
+                                    match view_handle {
+                                        sikhar_native_apple::NativeViewHandle::AppKit(ptr) => {
+                                            // Create NSView wrapper from pointer
+                                            let native_view = NSView::from_ptr(*ptr);
+                                            content_view.add_subview(&native_view);
+                                            native_view.set_visible(true);
+                                            native_view.set_wants_layer(true);
+                                            // Bring to front to ensure visibility
+                                            native_view.bring_to_front();
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                
+                                eprintln!("Embedded {} native views into window content view", view_count);
+                            } else {
+                                eprintln!("Warning: Content view is null, cannot embed native views");
+                            }
+                        }
+                    } else {
+                        eprintln!("Warning: Window handle is not AppKit type");
+                    }
+                } else {
+                    eprintln!("Warning: Failed to get raw window handle");
+                }
+            }
+            
+                // Update layouts again now that views are embedded
+                // Filter layouts to only include registered native widgets
+                let native_widget_ids: Vec<_> = manager.get_all_views().keys().copied().collect();
+                let layouts: std::collections::HashMap<_, _> = all_layouts
+                    .into_iter()
+                    .filter(|(id, _)| native_widget_ids.contains(id))
+                    .collect();
+                
+                // Convert physical pixels to logical pixels for parent_height
+                // The layout was computed with logical pixels, so we need logical height
+                let window_height_logical = (size.height as f32) / scale_factor;
+                manager.update_layouts(
+                    &layouts,
+                    window_height_logical,
+                    scale_factor,
+                );
+            }
+        }
     }
 
     fn window_event(

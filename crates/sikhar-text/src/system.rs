@@ -167,7 +167,8 @@ impl TextSystem {
         // Collect glyph instances
         let mut glyphs = Vec::new();
         let mut total_width: f32 = 0.0;
-        let mut total_height: f32 = 0.0;
+        let mut max_y: f32 = 0.0;
+        let mut min_y: f32 = f32::MAX;
         let color_arr = style.color.to_array();
 
         for run in buffer.layout_runs() {
@@ -240,10 +241,26 @@ impl TextSystem {
                 });
 
                 total_width = total_width.max(x + cached.width as f32);
+                min_y = min_y.min(y);
+                max_y = max_y.max(y + cached.height as f32);
             }
-
-            total_height = total_height.max(run.line_y + run.line_height);
         }
+
+        // Normalize Y positions so all glyphs start at y >= 0
+        // This ensures consistent positioning when centering text
+        if min_y < 0.0 && !glyphs.is_empty() {
+            for glyph in &mut glyphs {
+                glyph.pos[1] -= min_y;
+            }
+            max_y -= min_y;
+        }
+
+        // Calculate actual height from glyph bounds
+        let total_height = if glyphs.is_empty() {
+            style.font_size * style.line_height
+        } else {
+            max_y
+        };
 
         ShapedText {
             glyphs,
@@ -253,6 +270,7 @@ impl TextSystem {
     }
 
     /// Measure text without rasterizing (faster for layout).
+    /// Returns (width, height) where height is based on line metrics.
     pub fn measure(&mut self, text: &str, style: &TextStyle, max_width: Option<f32>) -> (f32, f32) {
         if text.is_empty() {
             return (0.0, style.font_size * style.line_height);
@@ -285,12 +303,20 @@ impl TextSystem {
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         let mut total_width: f32 = 0.0;
-        let mut total_height: f32 = 0.0;
+        let mut line_count: usize = 0;
 
         for run in buffer.layout_runs() {
             total_width = total_width.max(run.line_w);
-            total_height = total_height.max(run.line_y + run.line_height);
+            line_count += 1;
         }
+
+        // Use line height for consistent height calculation
+        // This matches what shape() returns after normalization
+        let total_height = if line_count == 0 {
+            style.font_size * style.line_height
+        } else {
+            style.font_size * style.line_height * (line_count as f32)
+        };
 
         (total_width, total_height)
     }

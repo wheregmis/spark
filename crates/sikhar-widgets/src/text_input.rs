@@ -4,6 +4,7 @@ use crate::{EventContext, EventResponse, PaintContext, Widget};
 use sikhar_core::Color;
 use sikhar_input::{shortcuts, InputEvent, Key};
 use sikhar_layout::WidgetId;
+use sikhar_text::TextStyle;
 use taffy::prelude::*;
 
 /// Style configuration for text input.
@@ -240,6 +241,7 @@ impl Widget for TextInput {
     fn paint(&self, ctx: &mut PaintContext) {
         let bounds = ctx.bounds();
         let focused = ctx.has_focus();
+        let scale = ctx.scale_factor;
 
         let bg = if focused {
             self.style.background_focused
@@ -262,13 +264,14 @@ impl Widget for TextInput {
             border,
         );
 
-        // Focus ring
+        // Focus ring (scale the offset values)
         if focused {
+            let offset = 2.0 * scale;
             let focus_bounds = sikhar_core::Rect::new(
-                bounds.x - 2.0,
-                bounds.y - 2.0,
-                bounds.width + 4.0,
-                bounds.height + 4.0,
+                bounds.x - offset,
+                bounds.y - offset,
+                bounds.width + offset * 2.0,
+                bounds.height + offset * 2.0,
             );
             ctx.fill_bordered_rect(
                 focus_bounds,
@@ -279,8 +282,82 @@ impl Widget for TextInput {
             );
         }
 
-        // Text and cursor rendering would be handled by the app runner
-        // using the TextSystem
+        // Calculate text area (inside padding) - scale padding for physical pixels
+        let padding_h = self.style.padding_h * scale;
+        let text_x = bounds.x + padding_h;
+        let text_width = bounds.width - padding_h * 2.0;
+
+        // Create text style (font size is in logical pixels, will be scaled by draw_text)
+        let text_style = TextStyle::default()
+            .with_size(self.style.font_size)
+            .with_color(self.style.text_color);
+
+        let placeholder_style = TextStyle::default()
+            .with_size(self.style.font_size)
+            .with_color(self.style.placeholder_color);
+
+        // Measure text height for vertical centering
+        let (_, text_height) = ctx.measure_text("Ay", &text_style);
+        let text_y = bounds.y + (bounds.height - text_height) / 2.0;
+
+        // Draw placeholder or value
+        if self.value.is_empty() {
+            // Draw placeholder text
+            if !self.placeholder.is_empty() {
+                ctx.draw_text(&self.placeholder, &placeholder_style, text_x, text_y);
+            }
+        } else {
+            // Draw selection highlight if any
+            if let Some(sel_start) = self.selection_start {
+                let (start, end) = if sel_start < self.cursor_pos {
+                    (sel_start, self.cursor_pos)
+                } else {
+                    (self.cursor_pos, sel_start)
+                };
+
+                // Measure text before selection start
+                let text_before_sel = &self.value[..start];
+                let (sel_x_start, _) = ctx.measure_text(text_before_sel, &text_style);
+
+                // Measure selected text
+                let selected_text = &self.value[start..end];
+                let (sel_width, _) = ctx.measure_text(selected_text, &text_style);
+
+                // Draw selection rectangle
+                if sel_width > 0.0 {
+                    let sel_rect = sikhar_core::Rect::new(
+                        text_x + sel_x_start,
+                        text_y,
+                        sel_width.min(text_width - sel_x_start),
+                        text_height,
+                    );
+                    ctx.fill_rect(sel_rect, Color::from_hex(0x3B82F6).with_alpha(0.3));
+                }
+            }
+
+            // Draw the text value
+            ctx.draw_text(&self.value, &text_style, text_x, text_y);
+        }
+
+        // Draw cursor when focused
+        if focused {
+            // Blink cursor at ~2Hz
+            let cursor_visible = (ctx.elapsed_time * 2.0).fract() < 0.5;
+
+            if cursor_visible {
+                // Measure text up to cursor position
+                let text_before_cursor = &self.value[..self.cursor_pos];
+                let (cursor_x_offset, _) = ctx.measure_text(text_before_cursor, &text_style);
+
+                let cursor_x = text_x + cursor_x_offset;
+                let cursor_height = text_height;
+
+                // Draw cursor line (scale cursor width)
+                let cursor_width = 2.0 * scale;
+                let cursor_rect = sikhar_core::Rect::new(cursor_x, text_y, cursor_width, cursor_height);
+                ctx.fill_rect(cursor_rect, self.style.text_color);
+            }
+        }
     }
 
     fn event(&mut self, ctx: &mut EventContext, event: &InputEvent) -> EventResponse {
