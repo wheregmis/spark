@@ -50,6 +50,16 @@ impl Color {
         [self.r, self.g, self.b, self.a]
     }
 
+    /// Convert to u8 array (0-255 range).
+    pub fn to_u8_array(self) -> [u8; 4] {
+        [
+            (self.r * 255.0) as u8,
+            (self.g * 255.0) as u8,
+            (self.b * 255.0) as u8,
+            (self.a * 255.0) as u8,
+        ]
+    }
+
     pub fn with_alpha(self, a: f32) -> Self {
         Self { a, ..self }
     }

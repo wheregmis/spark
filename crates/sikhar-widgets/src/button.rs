@@ -263,10 +263,11 @@ impl Widget for Button {
                 }
                 EventResponse::default()
             }
-            InputEvent::KeyDown { event } => {
+            InputEvent::KeyDown { .. } => {
                 if ctx.has_focus() {
-                    use sikhar_input::{Key, NamedKey};
-                    if matches!(&event.key, Key::Named(NamedKey::Enter)) {
+                    use sikhar_input::{ActionMapper, StandardAction};
+                    let mapper = ActionMapper::new();
+                    if mapper.is_action(event, StandardAction::Activate) {
                         if let Some(handler) = &mut self.on_click {
                             handler();
                         }

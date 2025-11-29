@@ -32,7 +32,8 @@ glam = "0.30.9"
 taffy = "0.9.2"
 
 # Text
-cosmic-text = "0.15.0"
+parley = "0.5.0"
+swash = "0.2.0"
 
 # Utilities
 slotmap = "1.0"

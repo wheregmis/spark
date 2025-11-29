@@ -24,20 +24,21 @@ pub struct CachedGlyph {
 }
 
 /// Key for looking up cached glyphs.
+/// Uses a hash of the font data + glyph ID + font size for unique identification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphKey {
-    /// Font ID from cosmic-text.
-    pub font_id: cosmic_text::fontdb::ID,
+    /// Hash of the font source for identification.
+    pub font_hash: u64,
     /// Glyph ID.
-    pub glyph_id: u16,
+    pub glyph_id: u32,
     /// Font size in 1/16th pixels (for sub-pixel precision).
     pub font_size_16: u32,
 }
 
 impl GlyphKey {
-    pub fn new(font_id: cosmic_text::fontdb::ID, glyph_id: u16, font_size: f32) -> Self {
+    pub fn new(font_hash: u64, glyph_id: u32, font_size: f32) -> Self {
         Self {
-            font_id,
+            font_hash,
             glyph_id,
             font_size_16: (font_size * 16.0) as u32,
         }
@@ -243,4 +244,3 @@ impl GlyphAtlas {
         self.dirty = false;
     }
 }
-

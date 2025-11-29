@@ -1,11 +1,23 @@
-//! Text shaping and layout system using cosmic-text.
+//! Text shaping and layout system using Parley.
 
 use crate::atlas::{CachedGlyph, GlyphAtlas, GlyphKey};
-use cosmic_text::{
-    Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache,
+use parley::{
+    fontique::Blob,
+    layout::{Alignment, GlyphRun, PositionedLayoutItem},
+    style::{FontFamily, FontStack, FontStyle, FontWeight, GenericFamily, LineHeight, StyleProperty},
+    FontContext, Layout, LayoutContext,
 };
 use sikhar_core::{Color, GlyphInstance};
+use swash::{
+    scale::{Render, ScaleContext, Source, StrikeWith},
+    zeno::{Format, Vector},
+    FontRef,
+};
 use wgpu::{Device, Queue};
+
+// Embed the Inter font at compile time
+static INTER_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+static INTER_BOLD: &[u8] = include_bytes!("../../../assets/fonts/Inter-Bold.ttf");
 
 /// Text style configuration.
 #[derive(Clone, Debug)]
@@ -27,7 +39,7 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
-            family: String::from("sans-serif"),
+            family: String::from("system-ui"),
             font_size: 16.0,
             line_height: 1.2,
             color: Color::BLACK,
@@ -88,33 +100,45 @@ impl ShapedText {
 
 /// The text system manages fonts, shaping, and glyph caching.
 pub struct TextSystem {
-    font_system: FontSystem,
-    swash_cache: SwashCache,
+    font_cx: FontContext,
+    layout_cx: LayoutContext<[u8; 4]>,
+    scale_cx: ScaleContext,
     atlas: GlyphAtlas,
 }
 
 impl TextSystem {
     /// Create a new text system.
     pub fn new(device: &Device) -> Self {
-        let font_system = FontSystem::new();
-        let swash_cache = SwashCache::new();
+        let mut font_cx = FontContext::new();
+        
+        // Register embedded Inter fonts
+        let regular_blob = Blob::new(std::sync::Arc::new(INTER_REGULAR.to_vec()));
+        let bold_blob = Blob::new(std::sync::Arc::new(INTER_BOLD.to_vec()));
+        
+        font_cx.collection.register_fonts(regular_blob, None);
+        font_cx.collection.register_fonts(bold_blob, None);
+        
+        
+        let layout_cx = LayoutContext::new();
+        let scale_cx = ScaleContext::new();
         let atlas = GlyphAtlas::new(device, 1024, 1024);
 
         Self {
-            font_system,
-            swash_cache,
+            font_cx,
+            layout_cx,
+            scale_cx,
             atlas,
         }
     }
 
-    /// Get a reference to the font system for loading fonts.
-    pub fn font_system(&self) -> &FontSystem {
-        &self.font_system
+    /// Get a reference to the font context.
+    pub fn font_context(&self) -> &FontContext {
+        &self.font_cx
     }
 
-    /// Get a mutable reference to the font system for loading fonts.
-    pub fn font_system_mut(&mut self) -> &mut FontSystem {
-        &mut self.font_system
+    /// Get a mutable reference to the font context.
+    pub fn font_context_mut(&mut self) -> &mut FontContext {
+        &mut self.font_cx
     }
 
     /// Get the glyph atlas.
@@ -135,82 +159,185 @@ impl TextSystem {
             return ShapedText::default();
         }
 
-        let metrics = Metrics::new(style.font_size, style.font_size * style.line_height);
+        // Build layout with Parley
+        let mut builder = self
+            .layout_cx
+            .ranged_builder(&mut self.font_cx, text, 1.0, true);
 
-        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        // Apply default styles
+        builder.push_default(StyleProperty::FontSize(style.font_size));
+        builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
+            style.line_height,
+        )));
+        
+        // Use embedded Inter font with fallback to system sans-serif
+        builder.push_default(StyleProperty::FontStack(FontStack::List(
+            vec![
+                FontFamily::Named("Inter".into()),
+                FontFamily::Generic(GenericFamily::SansSerif),
+            ]
+            .into(),
+        )));
 
-        // Set buffer width for wrapping
-        let width = max_width.unwrap_or(f32::MAX);
-        buffer.set_size(&mut self.font_system, Some(width), None);
+        // Apply weight and style
+        if style.bold {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+        }
+        if style.italic {
+            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
 
-        // Build attributes
-        let weight = if style.bold {
-            cosmic_text::Weight::BOLD
-        } else {
-            cosmic_text::Weight::NORMAL
-        };
+        // Set brush color (Parley uses [u8; 4] for colors)
+        let color_arr = style.color.to_u8_array();
+        builder.push_default(StyleProperty::Brush(color_arr));
 
-        let style_attr = if style.italic {
-            cosmic_text::Style::Italic
-        } else {
-            cosmic_text::Style::Normal
-        };
+        // Build the layout
+        let mut layout: Layout<[u8; 4]> = builder.build(text);
 
-        let attrs = Attrs::new()
-            .family(Family::Name(&style.family))
-            .weight(weight)
-            .style(style_attr);
-
-        buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
-        buffer.shape_until_scroll(&mut self.font_system, false);
+        // Perform line breaking
+        layout.break_all_lines(max_width);
+        layout.align(max_width, Alignment::Start, Default::default());
 
         // Collect glyph instances
         let mut glyphs = Vec::new();
-        let mut total_width: f32 = 0.0;
-        let mut max_y: f32 = 0.0;
         let mut min_y: f32 = f32::MAX;
-        let color_arr = style.color.to_array();
+        let mut max_y: f32 = f32::MIN;
 
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
+        for line in layout.lines() {
+            for item in line.items() {
+                if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    self.render_glyph_run(
+                        device,
+                        queue,
+                        &glyph_run,
+                        &mut glyphs,
+                        &mut min_y,
+                        &mut max_y,
+                    );
+                }
+            }
+        }
 
-                // Get or create cached glyph
-                let key = GlyphKey::new(
-                    glyph.font_id,
-                    glyph.glyph_id,
-                    style.font_size,
-                );
+        // Normalize Y positions so all glyphs start at y >= 0
+        if min_y < f32::MAX && min_y != 0.0 {
+            let offset = -min_y.min(0.0);
+            for glyph in &mut glyphs {
+                glyph.pos[1] += offset;
+            }
+            if max_y > f32::MIN {
+                max_y += offset;
+            }
+        }
 
-                let cached = if let Some(cached) = self.atlas.get(&key) {
-                    *cached
-                } else {
-                    // Rasterize the glyph
-                    if let Some(image) = self.swash_cache.get_image(
-                        &mut self.font_system,
-                        physical_glyph.cache_key,
-                    ) {
+        let total_height = if glyphs.is_empty() {
+            style.font_size * style.line_height
+        } else if max_y > f32::MIN {
+            max_y
+        } else {
+            style.font_size * style.line_height
+        };
+
+        ShapedText {
+            glyphs,
+            width: layout.width(),
+            height: total_height,
+        }
+    }
+
+    fn render_glyph_run(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        glyph_run: &GlyphRun<'_, [u8; 4]>,
+        glyphs: &mut Vec<GlyphInstance>,
+        min_y: &mut f32,
+        max_y: &mut f32,
+    ) {
+        let run = glyph_run.run();
+        let font = run.font();
+        let font_size = run.font_size();
+        
+        // Convert brush color from [u8; 4] back to [f32; 4] for GlyphInstance
+        let brush = glyph_run.style().brush;
+        let color = [
+            brush[0] as f32 / 255.0,
+            brush[1] as f32 / 255.0,
+            brush[2] as f32 / 255.0,
+            brush[3] as f32 / 255.0,
+        ];
+        let run_x = glyph_run.offset();
+        let run_y = glyph_run.baseline();
+
+        // Get font data for swash
+        let font_data = font.data.as_ref();
+        let font_ref = match FontRef::from_index(font_data, font.index as usize) {
+            Some(f) => f,
+            None => return,
+        };
+
+        // Create a hash from font data pointer for caching
+        let font_hash = font_data.as_ptr() as u64;
+
+        // Get normalized coordinates for variable fonts - convert to swash Setting format
+        let normalized_coords = run.normalized_coords();
+
+        // Track cursor position - glyph.x is for kerning adjustments, we need to accumulate advances
+        let mut cursor_x = run_x;
+
+        for glyph in glyph_run.glyphs() {
+            let glyph_id = glyph.id;
+            // glyph.x contains kerning/positioning adjustments, add to cursor
+            let x = cursor_x + glyph.x;
+            let y = run_y - glyph.y;
+
+            // Create glyph key for caching
+            let key = GlyphKey::new(font_hash, glyph_id as u32, font_size);
+
+            let cached = if let Some(cached) = self.atlas.get(&key) {
+                *cached
+            } else {
+                // Rasterize the glyph using swash
+                let mut scaler = self
+                    .scale_cx
+                    .builder(font_ref)
+                    .size(font_size)
+                    .hint(true)
+                    .normalized_coords(normalized_coords)
+                    .build();
+
+                let image = Render::new(&[
+                    Source::ColorOutline(0),
+                    Source::ColorBitmap(StrikeWith::BestFit),
+                    Source::Outline,
+                ])
+                .format(Format::Alpha)
+                .offset(Vector::new(0.0, 0.0))
+                .render(&mut scaler, glyph_id);
+
+                match image {
+                    Some(img) => {
                         let cached = self.atlas.insert(
                             queue,
                             key,
-                            image.placement.width,
-                            image.placement.height,
-                            image.placement.left,
-                            image.placement.top,
-                            &image.data,
+                            img.placement.width,
+                            img.placement.height,
+                            img.placement.left,
+                            img.placement.top,
+                            &img.data,
                         );
 
                         match cached {
                             Some(c) => c,
                             None => {
-                                // Atlas full, clear and retry
+                                // Atlas full, clear and retry with larger atlas
                                 self.atlas.clear();
                                 self.atlas = GlyphAtlas::new(device, 2048, 2048);
                                 continue;
                             }
                         }
-                    } else {
-                        // Create empty glyph for spaces
+                    }
+                    None => {
+                        // Create empty glyph for spaces and other non-rendering glyphs
                         CachedGlyph {
                             uv_x: 0.0,
                             uv_y: 0.0,
@@ -222,50 +349,30 @@ impl TextSystem {
                             offset_y: 0,
                         }
                     }
-                };
-
-                // Skip empty glyphs
-                if cached.width == 0 || cached.height == 0 {
-                    continue;
                 }
+            };
 
-                let x = physical_glyph.x as f32 + cached.offset_x as f32;
-                let y = run.line_y + physical_glyph.y as f32 - cached.offset_y as f32;
-
-                glyphs.push(GlyphInstance {
-                    pos: [x, y],
-                    size: [cached.width as f32, cached.height as f32],
-                    uv_pos: [cached.uv_x, cached.uv_y],
-                    uv_size: [cached.uv_width, cached.uv_height],
-                    color: color_arr,
-                });
-
-                total_width = total_width.max(x + cached.width as f32);
-                min_y = min_y.min(y);
-                max_y = max_y.max(y + cached.height as f32);
+            // Skip empty glyphs
+            if cached.width == 0 || cached.height == 0 {
+                continue;
             }
-        }
 
-        // Normalize Y positions so all glyphs start at y >= 0
-        // This ensures consistent positioning when centering text
-        if min_y < 0.0 && !glyphs.is_empty() {
-            for glyph in &mut glyphs {
-                glyph.pos[1] -= min_y;
-            }
-            max_y -= min_y;
-        }
+            let glyph_x = x + cached.offset_x as f32;
+            let glyph_y = y - cached.offset_y as f32;
 
-        // Calculate actual height from glyph bounds
-        let total_height = if glyphs.is_empty() {
-            style.font_size * style.line_height
-        } else {
-            max_y
-        };
+            *min_y = min_y.min(glyph_y);
+            *max_y = max_y.max(glyph_y + cached.height as f32);
 
-        ShapedText {
-            glyphs,
-            width: total_width,
-            height: total_height,
+            glyphs.push(GlyphInstance {
+                pos: [glyph_x, glyph_y],
+                size: [cached.width as f32, cached.height as f32],
+                uv_pos: [cached.uv_x, cached.uv_y],
+                uv_size: [cached.uv_width, cached.uv_height],
+                color,
+            });
+
+            // Advance cursor by glyph width
+            cursor_x += glyph.advance;
         }
     }
 
@@ -276,49 +383,38 @@ impl TextSystem {
             return (0.0, style.font_size * style.line_height);
         }
 
-        let metrics = Metrics::new(style.font_size, style.font_size * style.line_height);
-        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        // Build layout with Parley
+        let mut builder = self
+            .layout_cx
+            .ranged_builder(&mut self.font_cx, text, 1.0, true);
 
-        let width = max_width.unwrap_or(f32::MAX);
-        buffer.set_size(&mut self.font_system, Some(width), None);
+        // Apply styles
+        builder.push_default(StyleProperty::FontSize(style.font_size));
+        builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
+            style.line_height,
+        )));
+        
+        // Use embedded Inter font with fallback to system sans-serif
+        builder.push_default(StyleProperty::FontStack(FontStack::List(
+            vec![
+                FontFamily::Named("Inter".into()),
+                FontFamily::Generic(GenericFamily::SansSerif),
+            ]
+            .into(),
+        )));
 
-        let weight = if style.bold {
-            cosmic_text::Weight::BOLD
-        } else {
-            cosmic_text::Weight::NORMAL
-        };
-
-        let style_attr = if style.italic {
-            cosmic_text::Style::Italic
-        } else {
-            cosmic_text::Style::Normal
-        };
-
-        let attrs = Attrs::new()
-            .family(Family::Name(&style.family))
-            .weight(weight)
-            .style(style_attr);
-
-        buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
-        buffer.shape_until_scroll(&mut self.font_system, false);
-
-        let mut total_width: f32 = 0.0;
-        let mut line_count: usize = 0;
-
-        for run in buffer.layout_runs() {
-            total_width = total_width.max(run.line_w);
-            line_count += 1;
+        if style.bold {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+        }
+        if style.italic {
+            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
         }
 
-        // Use line height for consistent height calculation
-        // This matches what shape() returns after normalization
-        let total_height = if line_count == 0 {
-            style.font_size * style.line_height
-        } else {
-            style.font_size * style.line_height * (line_count as f32)
-        };
+        let mut layout: Layout<[u8; 4]> = builder.build(text);
 
-        (total_width, total_height)
+        // Perform line breaking
+        layout.break_all_lines(max_width);
+
+        (layout.width(), layout.height())
     }
 }
-
