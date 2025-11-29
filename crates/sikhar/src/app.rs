@@ -103,6 +103,7 @@ struct AppRunner<F: FnOnce() -> Box<dyn Widget>> {
 }
 
 struct AppState {
+    window: &'static dyn winit::window::Window,
     device: Device,
     queue: Queue,
     surface_state: SurfaceState<'static>,
@@ -455,6 +456,11 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         if response.relayout {
             state.needs_layout = true;
         }
+        
+        // Request redraw if we need to repaint or relayout
+        if state.needs_repaint || state.needs_layout {
+            state.window.request_redraw();
+        }
     }
 }
 
@@ -491,6 +497,7 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
         let scale_factor = window.scale_factor() as f32;
 
         self.state = Some(AppState {
+            window,
             device,
             queue,
             surface_state,
@@ -627,7 +634,12 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
                 }
             }
             WindowEvent::PointerMoved { position, .. } => {
-                let pos = glam::Vec2::new(position.x as f32, position.y as f32);
+                // Convert physical pixels to logical pixels for event handling
+                let scale_factor = self.state.as_ref().map(|s| s.scale_factor).unwrap_or(1.0);
+                let pos = glam::Vec2::new(
+                    position.x as f32 / scale_factor,
+                    position.y as f32 / scale_factor,
+                );
                 if let Some(s) = self.state.as_mut() {
                     s.mouse_pos = pos;
                 }
