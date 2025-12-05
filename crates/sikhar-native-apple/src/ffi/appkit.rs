@@ -486,14 +486,18 @@ impl NSProgressIndicator {
     /// Start animation (for indeterminate progress).
     pub fn start_animation(&self) {
         unsafe {
-            let _: () = msg_send![self.view.as_ptr(), startAnimation];
+            // Note: startAnimation: takes a sender parameter, we pass nil
+            let nil: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
+            let _: () = msg_send![self.view.as_ptr(), startAnimation: nil];
         }
     }
 
     /// Stop animation.
     pub fn stop_animation(&self) {
         unsafe {
-            let _: () = msg_send![self.view.as_ptr(), stopAnimation];
+            // Note: stopAnimation: takes a sender parameter, we pass nil
+            let nil: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
+            let _: () = msg_send![self.view.as_ptr(), stopAnimation: nil];
         }
     }
 
