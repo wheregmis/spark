@@ -2,9 +2,16 @@
 
 use sikhar_input::InputEvent;
 use sikhar_layout::{taffy, WidgetId};
-use sikhar_widgets::{EventContext, EventResponse, Widget};
+use sikhar_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
 use crate::NativeWidgetExt as _;
+
+/// Default minimum width for sliders (in logical pixels)
+const DEFAULT_MIN_SLIDER_WIDTH: f32 = 100.0;
+/// Default minimum height for sliders (in logical pixels)
+const DEFAULT_MIN_SLIDER_HEIGHT: f32 = 21.0;
+/// Preferred width for sliders (in logical pixels)
+const DEFAULT_PREFERRED_SLIDER_WIDTH: f32 = 200.0;
 
 /// Native slider widget.
 pub struct NativeSlider {
@@ -17,6 +24,8 @@ pub struct NativeSlider {
     max_value: f64,
     value: f64,
     on_change: Option<Box<dyn Fn(f64) + Send + Sync>>,
+    /// Preferred width (can be customized)
+    preferred_width: f32,
 }
 
 impl NativeSlider {
@@ -32,6 +41,7 @@ impl NativeSlider {
             max_value: 100.0,
             value: 50.0,
             on_change: None,
+            preferred_width: DEFAULT_PREFERRED_SLIDER_WIDTH,
         };
         slider.update_native_values();
         slider
@@ -66,6 +76,12 @@ impl NativeSlider {
         self.on_change = Some(Box::new(callback));
         self
     }
+    
+    /// Set the preferred width for the slider.
+    pub fn width(mut self, width: f32) -> Self {
+        self.preferred_width = width.max(DEFAULT_MIN_SLIDER_WIDTH);
+        self
+    }
 
     fn update_native_values(&mut self) {
         #[cfg(target_os = "macos")]
@@ -81,6 +97,28 @@ impl NativeSlider {
             self.slider.set_value(self.value as f32);
         }
     }
+    
+    /// Get the preferred size for this slider.
+    fn preferred_size(&self) -> (f32, f32) {
+        #[cfg(target_os = "macos")]
+        {
+            let (intrinsic_width, intrinsic_height) = self.slider.intrinsic_content_size();
+            let height = if intrinsic_height > 0.0 {
+                intrinsic_height as f32
+            } else {
+                DEFAULT_MIN_SLIDER_HEIGHT
+            };
+            (self.preferred_width, height)
+        }
+        #[cfg(target_os = "ios")]
+        {
+            (self.preferred_width, 31.0) // iOS standard slider height
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            (self.preferred_width, DEFAULT_MIN_SLIDER_HEIGHT)
+        }
+    }
 }
 
 impl Widget for NativeSlider {
@@ -94,11 +132,21 @@ impl Widget for NativeSlider {
 
     fn style(&self) -> taffy::Style {
         use taffy::prelude::*;
+        let (pref_width, pref_height) = self.preferred_size();
         taffy::Style {
-            size: Size {
-                width: length(200.0),
-                height: length(20.0),
+            // Use min_size to ensure minimum usable size
+            min_size: Size {
+                width: length(DEFAULT_MIN_SLIDER_WIDTH),
+                height: length(pref_height),
             },
+            // Prefer the configured width
+            size: Size {
+                width: length(pref_width),
+                height: length(pref_height),
+            },
+            // Allow flexible growth
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
             ..Default::default()
         }
     }
@@ -117,6 +165,10 @@ impl Widget for NativeSlider {
     
     fn is_native(&self) -> bool {
         true
+    }
+    
+    fn measure(&self, _ctx: &mut LayoutContext) -> Option<(f32, f32)> {
+        Some(self.preferred_size())
     }
     
     fn register_native(&self, widget_id: WidgetId, register: &mut dyn FnMut(WidgetId, *mut std::ffi::c_void)) {

@@ -53,6 +53,25 @@ impl NSView {
         }
     }
     
+    /// Get the view's intrinsic content size (if available).
+    /// Returns (width, height) or (-1.0, -1.0) if no intrinsic size.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        unsafe {
+            use objc2_foundation::NSSize;
+            let size: NSSize = msg_send![self.obj, intrinsicContentSize];
+            (size.width, size.height)
+        }
+    }
+    
+    /// Get the view's fitting size (the size that fits its content).
+    pub fn fitting_size(&self) -> (f64, f64) {
+        unsafe {
+            use objc2_foundation::NSSize;
+            let size: NSSize = msg_send![self.obj, fittingSize];
+            (size.width, size.height)
+        }
+    }
+    
     /// Make the view visible and set up for layer-backed rendering.
     pub fn set_visible(&self, visible: bool) {
         unsafe {
@@ -64,6 +83,13 @@ impl NSView {
     pub fn set_wants_layer(&self, wants: bool) {
         unsafe {
             let _: () = msg_send![self.obj, setWantsLayer: wants];
+        }
+    }
+    
+    /// Enable Auto Layout constraints.
+    pub fn set_translates_autoresizing_mask(&self, translates: bool) {
+        unsafe {
+            let _: () = msg_send![self.obj, setTranslatesAutoresizingMaskIntoConstraints: translates];
         }
     }
 
@@ -90,6 +116,20 @@ impl NSView {
     pub fn remove_from_superview(&self) {
         unsafe {
             let _: () = msg_send![self.obj, removeFromSuperview];
+        }
+    }
+    
+    /// Layout the view and its subviews.
+    pub fn layout_if_needed(&self) {
+        unsafe {
+            let _: () = msg_send![self.obj, layoutSubtreeIfNeeded];
+        }
+    }
+    
+    /// Mark the view as needing layout.
+    pub fn needs_layout(&self) {
+        unsafe {
+            let _: () = msg_send![self.obj, setNeedsLayout: true];
         }
     }
 }
@@ -151,6 +191,24 @@ impl NSButton {
     /// Get the underlying view.
     pub fn view(&self) -> &NSView {
         &self.view
+    }
+    
+    /// Get the button's intrinsic content size.
+    /// This is the size the button wants to be based on its content.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        self.view.intrinsic_content_size()
+    }
+    
+    /// Get the button's fitting size.
+    pub fn fitting_size(&self) -> (f64, f64) {
+        self.view.fitting_size()
+    }
+    
+    /// Size the button to fit its content.
+    pub fn size_to_fit(&self) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), sizeToFit];
+        }
     }
 }
 
@@ -233,6 +291,18 @@ impl NSTextField {
     pub fn view(&self) -> &NSView {
         &self.view
     }
+    
+    /// Get the text field's intrinsic content size.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        self.view.intrinsic_content_size()
+    }
+    
+    /// Size the text field to fit its content.
+    pub fn size_to_fit(&self) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), sizeToFit];
+        }
+    }
 }
 
 /// NSSlider wrapper for macOS.
@@ -289,6 +359,11 @@ impl NSSlider {
     pub fn view(&self) -> &NSView {
         &self.view
     }
+    
+    /// Get the slider's intrinsic content size.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        self.view.intrinsic_content_size()
+    }
 }
 
 /// NSSwitch (NSButton with switch style) wrapper for macOS.
@@ -344,6 +419,18 @@ impl NSSwitch {
     /// Get the underlying view.
     pub fn view(&self) -> &NSView {
         &self.view
+    }
+    
+    /// Get the switch's intrinsic content size.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        self.view.intrinsic_content_size()
+    }
+    
+    /// Size the switch to fit its content.
+    pub fn size_to_fit(&self) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), sizeToFit];
+        }
     }
 }
 
@@ -413,6 +500,11 @@ impl NSProgressIndicator {
     /// Get the underlying view.
     pub fn view(&self) -> &NSView {
         &self.view
+    }
+    
+    /// Get the progress indicator's intrinsic content size.
+    pub fn intrinsic_content_size(&self) -> (f64, f64) {
+        self.view.intrinsic_content_size()
     }
 }
 

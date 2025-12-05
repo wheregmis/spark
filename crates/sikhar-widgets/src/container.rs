@@ -139,6 +139,37 @@ impl Container {
         self.style.justify_content = Some(JustifyContent::Center);
         self
     }
+    
+    /// Align children at the start (left for row, top for column).
+    pub fn align_start(mut self) -> Self {
+        self.style.align_items = Some(AlignItems::FlexStart);
+        self.style.justify_content = Some(JustifyContent::FlexStart);
+        self
+    }
+    
+    /// Stretch children to fill the cross axis.
+    pub fn stretch(mut self) -> Self {
+        self.style.align_items = Some(AlignItems::Stretch);
+        self
+    }
+    
+    /// Space children evenly with space between them.
+    pub fn space_between(mut self) -> Self {
+        self.style.justify_content = Some(JustifyContent::SpaceBetween);
+        self
+    }
+    
+    /// Space children evenly with equal space around them.
+    pub fn space_around(mut self) -> Self {
+        self.style.justify_content = Some(JustifyContent::SpaceAround);
+        self
+    }
+    
+    /// Space children evenly with equal space between and around them.
+    pub fn space_evenly(mut self) -> Self {
+        self.style.justify_content = Some(JustifyContent::SpaceEvenly);
+        self
+    }
 
     /// Set fixed size.
     pub fn size(mut self, width: f32, height: f32) -> Self {
@@ -157,6 +188,18 @@ impl Container {
         };
         self
     }
+    
+    /// Set width only (height auto).
+    pub fn width(mut self, width: f32) -> Self {
+        self.style.size.width = length(width);
+        self
+    }
+    
+    /// Set height only (width auto).
+    pub fn height(mut self, height: f32) -> Self {
+        self.style.size.height = length(height);
+        self
+    }
 
     /// Fill available space.
     pub fn fill(mut self) -> Self {
@@ -166,10 +209,34 @@ impl Container {
         };
         self
     }
+    
+    /// Fill width only (height auto).
+    pub fn fill_width(mut self) -> Self {
+        self.style.size.width = percent(1.0);
+        self
+    }
+    
+    /// Fill height only (width auto).
+    pub fn fill_height(mut self) -> Self {
+        self.style.size.height = percent(1.0);
+        self
+    }
 
     /// Set flex grow.
     pub fn flex_grow(mut self, grow: f32) -> Self {
         self.style.flex_grow = grow;
+        self
+    }
+    
+    /// Set flex shrink.
+    pub fn flex_shrink(mut self, shrink: f32) -> Self {
+        self.style.flex_shrink = shrink;
+        self
+    }
+    
+    /// Enable flex wrapping.
+    pub fn wrap(mut self) -> Self {
+        self.style.flex_wrap = taffy::FlexWrap::Wrap;
         self
     }
 }

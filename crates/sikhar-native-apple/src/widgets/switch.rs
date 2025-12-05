@@ -2,9 +2,16 @@
 
 use sikhar_input::InputEvent;
 use sikhar_layout::{taffy, WidgetId};
-use sikhar_widgets::{EventContext, EventResponse, Widget};
+use sikhar_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
 use crate::NativeWidgetExt as _;
+
+/// Default minimum width for switches (in logical pixels)
+const DEFAULT_MIN_SWITCH_WIDTH: f32 = 40.0;
+/// Default minimum height for switches (in logical pixels)
+const DEFAULT_MIN_SWITCH_HEIGHT: f32 = 21.0;
+/// Approximate character width for label size estimation
+const CHAR_WIDTH_ESTIMATE: f32 = 7.0;
 
 /// Native switch widget.
 pub struct NativeSwitch {
@@ -16,6 +23,8 @@ pub struct NativeSwitch {
     checked: bool,
     title: String,
     on_change: Option<Box<dyn Fn(bool) + Send + Sync>>,
+    /// Cached intrinsic size
+    cached_size: Option<(f32, f32)>,
 }
 
 impl NativeSwitch {
@@ -31,8 +40,10 @@ impl NativeSwitch {
             checked: false,
             title: title.clone(),
             on_change: None,
+            cached_size: None,
         };
         switch.set_title(&title);
+        switch.update_cached_size();
         switch
     }
 
@@ -57,6 +68,7 @@ impl NativeSwitch {
         {
             self.switch.set_title(&self.title);
         }
+        self.update_cached_size();
     }
 
     /// Set the change callback.
@@ -66,6 +78,43 @@ impl NativeSwitch {
     {
         self.on_change = Some(Box::new(callback));
         self
+    }
+    
+    /// Update the cached intrinsic size from the native view.
+    fn update_cached_size(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            // Size the switch to fit its content
+            self.switch.size_to_fit();
+            // Get the intrinsic size
+            let (width, height) = self.switch.intrinsic_content_size();
+            // If intrinsic size is valid, use it; otherwise estimate
+            if width > 0.0 && height > 0.0 {
+                self.cached_size = Some((width as f32, height as f32));
+            } else {
+                // Estimate: switch + label width
+                let label_width = self.title.len() as f32 * CHAR_WIDTH_ESTIMATE;
+                let estimated_width = (DEFAULT_MIN_SWITCH_WIDTH + label_width + 8.0).max(DEFAULT_MIN_SWITCH_WIDTH);
+                self.cached_size = Some((estimated_width, DEFAULT_MIN_SWITCH_HEIGHT));
+            }
+        }
+        #[cfg(target_os = "ios")]
+        {
+            // iOS switches don't have labels by default, use standard size
+            // UISwitch has a fixed size of approximately 51x31
+            self.cached_size = Some((51.0, 31.0));
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            let label_width = self.title.len() as f32 * CHAR_WIDTH_ESTIMATE;
+            let estimated_width = (DEFAULT_MIN_SWITCH_WIDTH + label_width + 8.0).max(DEFAULT_MIN_SWITCH_WIDTH);
+            self.cached_size = Some((estimated_width, DEFAULT_MIN_SWITCH_HEIGHT));
+        }
+    }
+    
+    /// Get the preferred size for this switch.
+    pub fn preferred_size(&self) -> (f32, f32) {
+        self.cached_size.unwrap_or((DEFAULT_MIN_SWITCH_WIDTH, DEFAULT_MIN_SWITCH_HEIGHT))
     }
 }
 
@@ -80,11 +129,20 @@ impl Widget for NativeSwitch {
 
     fn style(&self) -> taffy::Style {
         use taffy::prelude::*;
+        let (pref_width, pref_height) = self.preferred_size();
         taffy::Style {
+            // Use min_size to ensure the switch has at least its intrinsic size
+            min_size: Size {
+                width: length(pref_width),
+                height: length(pref_height),
+            },
+            // Size to fit content
             size: Size {
                 width: auto(),
-                height: length(20.0),
+                height: length(pref_height),
             },
+            // Don't shrink below intrinsic size
+            flex_shrink: 0.0,
             ..Default::default()
         }
     }
@@ -103,6 +161,10 @@ impl Widget for NativeSwitch {
     
     fn is_native(&self) -> bool {
         true
+    }
+    
+    fn measure(&self, _ctx: &mut LayoutContext) -> Option<(f32, f32)> {
+        Some(self.preferred_size())
     }
     
     fn register_native(&self, widget_id: WidgetId, register: &mut dyn FnMut(WidgetId, *mut std::ffi::c_void)) {
