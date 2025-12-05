@@ -149,7 +149,7 @@ fn main() {
                                                             Container::new()
                                                                 .row()
                                                                 .gap(8.0)
-                                                                .align_items(taffy::AlignItems::Center)
+                                                                .center()
                                                                 .child(NativeProgressIndicator::new().indeterminate(true))
                                                                 .child(NativeLabel::new("Loading...")),
                                                         ),

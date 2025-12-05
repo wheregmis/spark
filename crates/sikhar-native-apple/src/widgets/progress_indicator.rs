@@ -170,8 +170,9 @@ impl Widget for NativeProgressIndicator {
                     width: length(pref_width),
                     height: length(pref_height),
                 },
+                // Allow flexible growth but don't shrink below min_size
                 flex_grow: 1.0,
-                flex_shrink: 1.0,
+                flex_shrink: 0.0,
                 ..Default::default()
             }
         }
