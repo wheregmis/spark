@@ -130,7 +130,7 @@ impl Widget for NativeButton {
                 width: auto(),
                 height: length(pref_height),
             },
-            // Allow flexible layout
+            // Don't shrink below intrinsic size
             flex_shrink: 0.0,
             ..Default::default()
         }
