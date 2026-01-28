@@ -352,8 +352,9 @@ impl TextSystem {
                 }
             };
 
-            // Skip empty glyphs
+            // Skip empty glyphs but still advance cursor
             if cached.width == 0 || cached.height == 0 {
+                cursor_x += glyph.advance;
                 continue;
             }
 
