@@ -207,6 +207,7 @@ fn build_scroll_section() -> Container {
             .child(
                 Scroll::new()
                     .vertical()
+                    .fill()
                     .content(scroll_content)
             ),
     )

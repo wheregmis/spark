@@ -5,12 +5,12 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-spark-core = { workspace = true }
-spark-render = { workspace = true }
-spark-layout = { workspace = true }
-spark-text = { workspace = true }
-spark-input = { workspace = true }
-glam = { workspace = true }
+spark-core = { path = "../spark-core" }
+spark-layout = { path = "../spark-layout" }
+spark-input = { path = "../spark-input" }
+spark-text = { path = "../spark-text" }
+spark-render = { path = "../spark-render" }
 taffy = { workspace = true }
+log = { workspace = true }
+glam = { workspace = true }
 wgpu = { workspace = true }
-

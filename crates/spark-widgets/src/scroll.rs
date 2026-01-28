@@ -51,6 +51,7 @@ pub struct Scroll {
     offset_y: f32,
     content_size: Cell<(f32, f32)>,
     style: ScrollbarStyle,
+    layout_style: Style,
     dragging_scrollbar: bool,
     hover_scrollbar: bool,
     debug_overlay: bool,
@@ -73,10 +74,74 @@ impl Scroll {
             offset_y: 0.0,
             content_size: Cell::new((0.0, 0.0)),
             style: ScrollbarStyle::default(),
+            layout_style: Style {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                overflow: Point {
+                    x: Overflow::Hidden,
+                    y: Overflow::Hidden,
+                },
+                ..Default::default()
+            },
             dragging_scrollbar: false,
             hover_scrollbar: false,
             debug_overlay: false,
         }
+    }
+
+    /// Set width.
+    pub fn width(mut self, width: f32) -> Self {
+        self.layout_style.size.width = length(width);
+        self
+    }
+
+    /// Set height.
+    pub fn height(mut self, height: f32) -> Self {
+        self.layout_style.size.height = length(height);
+        self
+    }
+
+    /// Set fixed size.
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.layout_style.size = Size {
+            width: length(width),
+            height: length(height),
+        };
+        self
+    }
+
+    /// Fill available space.
+    pub fn fill(mut self) -> Self {
+        self.layout_style.size = Size {
+            width: percent(1.0),
+            height: percent(1.0),
+        };
+        self.layout_style.align_self = Some(AlignSelf::Stretch);
+        self
+    }
+
+    /// Fill width.
+    pub fn fill_width(mut self) -> Self {
+        self.layout_style.size.width = percent(1.0);
+        self
+    }
+
+    /// Fill height.
+    pub fn fill_height(mut self) -> Self {
+        self.layout_style.size.height = percent(1.0);
+        self
+    }
+
+    /// Set flex grow.
+    pub fn flex_grow(mut self, grow: f32) -> Self {
+        self.layout_style.flex_grow = grow;
+        self
+    }
+
+    /// Set flex shrink.
+    pub fn flex_shrink(mut self, shrink: f32) -> Self {
+        self.layout_style.flex_shrink = shrink;
+        self
     }
 
     /// Set the content widget.
@@ -271,15 +336,7 @@ impl Widget for Scroll {
     }
 
     fn style(&self) -> Style {
-        Style {
-            display: Display::Flex,
-            flex_direction: FlexDirection::Column,
-            overflow: Point {
-                x: Overflow::Hidden,
-                y: Overflow::Hidden,
-            },
-            ..Default::default()
-        }
+        self.layout_style.clone()
     }
 
     fn is_scroll_container(&self) -> bool {
