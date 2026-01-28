@@ -11,6 +11,7 @@ members = [
     "examples/triangle",
     "examples/demo",
     "examples/counter",
+    "examples/hello_world",
     "examples/native-demo",
     "run-wasm",
 ]
