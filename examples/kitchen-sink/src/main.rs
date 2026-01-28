@@ -27,81 +27,91 @@ fn build_ui() -> Box<dyn Widget> {
 fn build_sidebar() -> Container {
     Container::new()
         .column()
-        .gap(12.0)
-        .padding(20.0)
-        .width(220.0)
+        .gap(32.0) // Increased gap between major sections
+        .padding(24.0)
+        .width(250.0) // Increased width
         .fill_height()
         .background(Color::from_hex(0x1E293B))
         .child(
             Text::new("Kitchen Sink")
-                .size(20.0)
+                .size(24.0)
                 .bold()
                 .color(Color::WHITE),
         )
         // Section: Button Gallery
         .child(
-            Text::new("Buttons")
-                .size(16.0)
-                .bold()
-                .color(Color::from_hex(0x94A3B8)),
-        )
-        .child(
-            Button::new("Default")
-                .background(Color::from_hex(0x3B82F6))
-                .on_click(|| {
-                    log::info!("Default button clicked!");
-                }),
-        )
-        .child(
-            Button::new("Success")
-                .background(Color::from_hex(0x22C55E))
-                .on_click(|| {
-                    log::info!("Success button clicked!");
-                }),
-        )
-        .child(
-            Button::new("Danger")
-                .background(Color::from_hex(0xEF4444))
-                .on_click(|| {
-                    log::info!("Danger button clicked!");
-                }),
-        )
-        .child(
-            Button::new("Warning")
-                .background(Color::from_hex(0xF59E0B))
-                .on_click(|| {
-                    log::info!("Warning button clicked!");
-                }),
-        )
-        .child(
-            Button::new("Secondary")
-                .background(Color::from_hex(0x64748B))
-                .on_click(|| {
-                    log::info!("Secondary button clicked!");
-                }),
+            Container::new()
+                .column()
+                .gap(12.0)
+                .child(
+                    Text::new("Buttons")
+                        .size(14.0)
+                        .bold()
+                        .color(Color::from_hex(0x94A3B8)),
+                )
+                .child(
+                    Button::new("Default")
+                        .background(Color::from_hex(0x3B82F6))
+                        .on_click(|| {
+                            log::info!("Default button clicked!");
+                        }),
+                )
+                .child(
+                    Button::new("Success")
+                        .background(Color::from_hex(0x22C55E))
+                        .on_click(|| {
+                            log::info!("Success button clicked!");
+                        }),
+                )
+                .child(
+                    Button::new("Danger")
+                        .background(Color::from_hex(0xEF4444))
+                        .on_click(|| {
+                            log::info!("Danger button clicked!");
+                        }),
+                )
+                .child(
+                    Button::new("Warning")
+                        .background(Color::from_hex(0xF59E0B))
+                        .on_click(|| {
+                            log::info!("Warning button clicked!");
+                        }),
+                )
+                .child(
+                    Button::new("Secondary")
+                        .background(Color::from_hex(0x64748B))
+                        .on_click(|| {
+                            log::info!("Secondary button clicked!");
+                        }),
+                ),
         )
         // Section: Typography
         .child(
-            Text::new("Typography")
-                .size(16.0)
-                .bold()
-                .color(Color::from_hex(0x94A3B8)),
-        )
-        .child(
-            Text::new("Heading Text")
-                .size(24.0)
-                .bold()
-                .color(Color::WHITE),
-        )
-        .child(
-            Text::new("Body text example")
-                .size(16.0)
-                .color(Color::from_hex(0xE2E8F0)),
-        )
-        .child(
-            Text::new("Small caption")
-                .size(12.0)
-                .color(Color::from_hex(0x94A3B8)),
+            Container::new()
+                .column()
+                .gap(16.0)
+                .child(
+                    Text::new("Typography")
+                        .size(14.0)
+                        .bold()
+                        .color(Color::from_hex(0x94A3B8)),
+                )
+                .child(
+                    Text::new("Heading Text")
+                        .size(28.0)
+                        .bold()
+                        .color(Color::WHITE),
+                )
+                .child(
+                    Text::new("Body text example that might wrap if it is too long for the sidebar.")
+                        .size(16.0)
+                        .color(Color::from_hex(0xE2E8F0)),
+                )
+                .child(
+                    Text::new("Small caption text")
+                        .size(12.0)
+                        .color(Color::from_hex(0x94A3B8)),
+                ),
         )
 }
 
