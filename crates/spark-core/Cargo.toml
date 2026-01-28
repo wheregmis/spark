@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 winit = { workspace = true }
-wgpu = { workspace = true }
+wgpu = { workspace = true, features = ["webgl"] }
 pollster = { workspace = true }
 bytemuck = { workspace = true }
 log = { workspace = true }

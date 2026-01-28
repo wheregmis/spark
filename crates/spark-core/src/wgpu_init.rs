@@ -16,20 +16,44 @@ pub async fn init_wgpu<'a>(window: &'a dyn Window) -> (Device, Queue, SurfaceSta
     #[cfg(not(target_arch = "wasm32"))]
     let backends = Backends::PRIMARY;
 
-    let instance = Instance::new(&InstanceDescriptor {
-        backends,
-        ..Default::default()
-    });
-    let surface = instance.create_surface(window).expect("create surface");
+    let (instance, surface, adapter) = {
+        let instance = Instance::new(&InstanceDescriptor {
+            backends,
+            ..Default::default()
+        });
+        let surface = instance.create_surface(window).expect("create surface");
 
-    let adapter = instance
-        .request_adapter(&RequestAdapterOptions {
-            power_preference: PowerPreference::HighPerformance,
-            force_fallback_adapter: false,
-            compatible_surface: Some(&surface),
-        })
-        .await
-        .expect("adapter");
+        let adapter = instance
+            .request_adapter(&RequestAdapterOptions {
+                power_preference: PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: Some(&surface),
+            })
+            .await;
+
+        #[cfg(target_arch = "wasm32")]
+        if adapter.is_none() {
+            let gl_instance = Instance::new(&InstanceDescriptor {
+                backends: Backends::GL,
+                ..Default::default()
+            });
+            let gl_surface = gl_instance.create_surface(window).expect("create surface");
+            let gl_adapter = gl_instance
+                .request_adapter(&RequestAdapterOptions {
+                    power_preference: PowerPreference::HighPerformance,
+                    force_fallback_adapter: false,
+                    compatible_surface: Some(&gl_surface),
+                })
+                .await
+                .expect("adapter");
+            (gl_instance, gl_surface, gl_adapter)
+        } else {
+            (instance, surface, adapter.expect("adapter"))
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        (instance, surface, adapter.expect("adapter"))
+    };
 
     let (device, queue) = adapter
         .request_device(
