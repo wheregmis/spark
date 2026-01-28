@@ -1,6 +1,12 @@
 use wgpu::*;
 use winit::{dpi::PhysicalSize, window::Window};
 
+#[cfg(target_arch = "wasm32")]
+use std::ops::Deref;
+
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::WindowExtWeb;
+
 pub struct SurfaceState<'a> {
     pub surface: Surface<'a>,
     pub config: SurfaceConfiguration,
@@ -16,13 +22,12 @@ pub async fn init_wgpu<'a>(window: &'a dyn Window) -> (Device, Queue, SurfaceSta
     #[cfg(not(target_arch = "wasm32"))]
     let backends = Backends::PRIMARY;
 
-    let (instance, surface, adapter) = {
+    let (_instance, surface, adapter) = {
         let instance = Instance::new(&InstanceDescriptor {
             backends,
             ..Default::default()
         });
-        let surface = instance.create_surface(window).expect("create surface");
-
+        let surface = create_surface(&instance, window);
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
                 power_preference: PowerPreference::HighPerformance,
@@ -32,23 +37,24 @@ pub async fn init_wgpu<'a>(window: &'a dyn Window) -> (Device, Queue, SurfaceSta
             .await;
 
         #[cfg(target_arch = "wasm32")]
-        if adapter.is_none() {
-            let gl_instance = Instance::new(&InstanceDescriptor {
-                backends: Backends::GL,
-                ..Default::default()
-            });
-            let gl_surface = gl_instance.create_surface(window).expect("create surface");
-            let gl_adapter = gl_instance
-                .request_adapter(&RequestAdapterOptions {
-                    power_preference: PowerPreference::HighPerformance,
-                    force_fallback_adapter: false,
-                    compatible_surface: Some(&gl_surface),
-                })
-                .await
-                .expect("adapter");
-            (gl_instance, gl_surface, gl_adapter)
-        } else {
-            (instance, surface, adapter.expect("adapter"))
+        match adapter {
+            Ok(adapter) => (instance, surface, adapter),
+            Err(_) => {
+                let gl_instance = Instance::new(&InstanceDescriptor {
+                    backends: Backends::GL,
+                    ..Default::default()
+                });
+                let gl_surface = create_surface(&gl_instance, window);
+                let gl_adapter = gl_instance
+                    .request_adapter(&RequestAdapterOptions {
+                        power_preference: PowerPreference::HighPerformance,
+                        force_fallback_adapter: false,
+                        compatible_surface: Some(&gl_surface),
+                    })
+                    .await
+                    .expect("adapter");
+                (gl_instance, gl_surface, gl_adapter)
+            }
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -88,6 +94,17 @@ pub async fn init_wgpu<'a>(window: &'a dyn Window) -> (Device, Queue, SurfaceSta
     state.reconfigure(&device);
 
     (device, queue, state)
+}
+
+fn create_surface<'a>(instance: &'a Instance, window: &'a dyn Window) -> Surface<'a> {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(canvas) = window.canvas() {
+        return instance
+            .create_surface(SurfaceTarget::Canvas(canvas.deref().clone()))
+            .expect("create surface");
+    }
+
+    instance.create_surface(window).expect("create surface")
 }
 
 impl<'a> SurfaceState<'a> {

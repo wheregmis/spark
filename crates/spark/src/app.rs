@@ -9,6 +9,9 @@ use spark_widgets::{EventContext, PaintContext, Widget};
 use wgpu::{Device, Queue};
 use winit::event::WindowEvent;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::spawn_local;
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use spark_native_apple::ViewManager;
 
@@ -100,6 +103,7 @@ struct AppRunner<F: FnOnce() -> Box<dyn Widget>> {
     config: AppConfig,
     build_ui: Option<F>,
     state: Option<AppState>,
+    pending_state: Option<PendingState>,
 }
 
 struct AppState {
@@ -122,13 +126,171 @@ struct AppState {
     native_view_manager: Option<ViewManager>,
 }
 
+struct PendingState {
+    window: &'static dyn winit::window::Window,
+    device: Device,
+    queue: Queue,
+    surface_state: SurfaceState<'static>,
+}
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static APP_STATE: std::cell::RefCell<Option<*mut dyn AppRunnerCallbackState>> =
+        std::cell::RefCell::new(None);
+}
+
+#[cfg(target_arch = "wasm32")]
+trait AppRunnerCallbackState {
+    fn set_pending_state(&mut self, pending: PendingState);
+}
+
 impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
     fn new(config: AppConfig, build_ui: F) -> Self {
         Self {
             config,
             build_ui: Some(build_ui),
             state: None,
+            pending_state: None,
         }
+    }
+
+    fn finish_init(&mut self) {
+        let PendingState {
+            window,
+            device,
+            queue,
+            surface_state,
+        } = self.pending_state.take().expect("pending state");
+
+        let renderer = Renderer::new(&device, surface_state.config.format);
+        let text_system = TextSystem::new(&device);
+        let draw_list = DrawList::new();
+        let layout_tree = LayoutTree::new();
+        let focus_manager = FocusManager::new();
+
+        // Build the UI
+        let build_ui = self.build_ui.take().expect("build_ui already called");
+        let root_widget = build_ui();
+
+        let scale_factor = window.scale_factor() as f32;
+
+        self.state = Some(AppState {
+            window,
+            device,
+            queue,
+            surface_state,
+            renderer,
+            text_system,
+            draw_list,
+            layout_tree,
+            focus_manager,
+            root_widget,
+            start_time: Instant::now(),
+            mouse_pos: glam::Vec2::ZERO,
+            scale_factor,
+            needs_layout: true,
+            needs_repaint: true,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            native_view_manager: None,
+        });
+
+        // Build initial layout (this registers native widgets)
+        self.build_layout();
+
+        // Embed native views into the window after layout
+        // This must happen after layout so widgets are registered
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            // Get all data we need before any mutable borrows
+            let (size, scale_factor, all_layouts) = {
+                let state = self.state.as_ref().unwrap();
+                let mut layouts = std::collections::HashMap::new();
+                state.layout_tree.traverse(|widget_id, computed, _depth| {
+                    layouts.insert(widget_id, *computed);
+                });
+                (state.surface_state.size, state.scale_factor, layouts)
+            };
+
+            // Now get mutable access to manager
+            if let Some(ref mut manager) = self.state.as_mut().unwrap().native_view_manager {
+                // Embed native views into window - inline implementation
+                use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+                use objc2::runtime::AnyObject;
+                use spark_native_apple::ffi::appkit::NSView;
+
+                #[cfg(target_os = "macos")]
+                {
+                    // Get the raw window handle from winit
+                    if let Ok(raw_handle) = window.raw_window_handle() {
+                        if let RawWindowHandle::AppKit(handle) = raw_handle {
+                            unsafe {
+                                // Get NSWindow from the handle
+                                // The ns_view field contains the content view
+                                let content_view_ptr: *mut AnyObject =
+                                    handle.ns_view.as_ptr() as *mut AnyObject;
+
+                                if !content_view_ptr.is_null() {
+                                    // Set the content view as the root view in the manager
+                                    manager.set_root_view(
+                                        spark_native_apple::NativeViewHandle::AppKit(
+                                            content_view_ptr,
+                                        ),
+                                    );
+
+                                    // Create content view wrapper
+                                    let content_view = NSView::from_ptr(content_view_ptr);
+
+                                    // Add all registered native views to the content view
+                                    let view_count = manager.get_all_views().len();
+                                    for (_widget_id, view_handle) in manager.get_all_views() {
+                                        match view_handle {
+                                            spark_native_apple::NativeViewHandle::AppKit(ptr) => {
+                                                // Create NSView wrapper from pointer
+                                                let native_view = NSView::from_ptr(*ptr);
+                                                content_view.add_subview(&native_view);
+                                                native_view.set_visible(true);
+                                                native_view.set_wants_layer(true);
+                                                // Bring to front to ensure visibility
+                                                native_view.bring_to_front();
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+
+                                    eprintln!(
+                                        "Embedded {} native views into window content view",
+                                        view_count
+                                    );
+                                } else {
+                                    eprintln!(
+                                        "Warning: Content view is null, cannot embed native views"
+                                    );
+                                }
+                            }
+                        } else {
+                            eprintln!("Warning: Window handle is not AppKit type");
+                        }
+                    } else {
+                        eprintln!("Warning: Failed to get raw window handle");
+                    }
+                }
+
+                // Update layouts again now that views are embedded
+                // Filter layouts to only include registered native widgets
+                let native_widget_ids: Vec<_> = manager.get_all_views().keys().copied().collect();
+                let layouts: std::collections::HashMap<_, _> = all_layouts
+                    .into_iter()
+                    .filter(|(id, _)| native_widget_ids.contains(id))
+                    .collect();
+
+                // Convert physical pixels to logical pixels for parent_height
+                // The layout was computed with logical pixels, so we need logical height
+                let window_height_logical = (size.height as f32) / scale_factor;
+                manager.update_layouts(&layouts, window_height_logical, scale_factor);
+            }
+        }
+
+        window.request_redraw();
     }
 
     fn build_layout(&mut self) {
@@ -382,7 +544,9 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
     }
 
     fn handle_event(&mut self, event: InputEvent) {
-        let state = self.state.as_mut().unwrap();
+        let Some(state) = self.state.as_mut() else {
+            return;
+        };
 
         // Simple event dispatch - dispatch to all widgets, let them check bounds
         fn dispatch_event(
@@ -464,146 +628,72 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl<F: FnOnce() -> Box<dyn Widget>> AppRunnerCallbackState for AppRunner<F> {
+    fn set_pending_state(&mut self, pending: PendingState) {
+        self.pending_state = Some(pending);
+        self.finish_init();
+    }
+}
+
 impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for AppRunner<F> {
     fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
+        let mut window_attributes = winit::window::WindowAttributes::default()
+            .with_title(&self.config.title)
+            .with_surface_size(winit::dpi::LogicalSize::new(
+                self.config.width,
+                self.config.height,
+            ));
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            window_attributes = window_attributes.with_platform_attributes(Box::new(
+                winit::platform::web::WindowAttributesWeb::default().with_append(true),
+            ));
+        }
+
         let window = event_loop
-            .create_window(
-                winit::window::WindowAttributes::default()
-                    .with_title(&self.config.title)
-                    .with_surface_size(winit::dpi::LogicalSize::new(
-                        self.config.width,
-                        self.config.height,
-                    )),
-            )
+            .create_window(window_attributes)
             .expect("create window");
 
         let window_leaked: &'static mut Box<dyn winit::window::Window> =
             Box::leak(Box::new(window));
         let window: &'static dyn winit::window::Window = &**window_leaked;
 
-        // Initialize wgpu - use pollster on native, web handles this specially
-        let (device, queue, surface_state) = pollster::block_on(init_wgpu(window));
-
-        let renderer = Renderer::new(&device, surface_state.config.format);
-        let text_system = TextSystem::new(&device);
-        let draw_list = DrawList::new();
-        let layout_tree = LayoutTree::new();
-        let focus_manager = FocusManager::new();
-
-        // Build the UI
-        let build_ui = self.build_ui.take().expect("build_ui already called");
-        let root_widget = build_ui();
-
-        let scale_factor = window.scale_factor() as f32;
-
-        self.state = Some(AppState {
-            window,
-            device,
-            queue,
-            surface_state,
-            renderer,
-            text_system,
-            draw_list,
-            layout_tree,
-            focus_manager,
-            root_widget,
-            start_time: Instant::now(),
-            mouse_pos: glam::Vec2::ZERO,
-            scale_factor,
-            needs_layout: true,
-            needs_repaint: true,
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            native_view_manager: None,
-        });
-
-        // Build initial layout (this registers native widgets)
-        self.build_layout();
-        
-        // Embed native views into the window after layout
-        // This must happen after layout so widgets are registered
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            // Get all data we need before any mutable borrows
-            let (size, scale_factor, all_layouts) = {
-                let state = self.state.as_ref().unwrap();
-                let mut layouts = std::collections::HashMap::new();
-                state.layout_tree.traverse(|widget_id, computed, _depth| {
-                    layouts.insert(widget_id, *computed);
-                });
-                (state.surface_state.size, state.scale_factor, layouts)
-            };
-            
-            // Now get mutable access to manager
-            if let Some(ref mut manager) = self.state.as_mut().unwrap().native_view_manager {
-            // Embed native views into window - inline implementation
-            use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-            use objc2::runtime::AnyObject;
-            use spark_native_apple::ffi::appkit::NSView;
-            
-            #[cfg(target_os = "macos")]
-            {
-                // Get the raw window handle from winit
-                if let Ok(raw_handle) = window.raw_window_handle() {
-                    if let RawWindowHandle::AppKit(handle) = raw_handle {
+            let (device, queue, surface_state) = pollster::block_on(init_wgpu(window));
+            self.pending_state = Some(PendingState {
+                window,
+                device,
+                queue,
+                surface_state,
+            });
+            self.finish_init();
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            APP_STATE.with(|app_state| {
+                *app_state.borrow_mut() = Some(self as *mut _ as *mut dyn AppRunnerCallbackState);
+            });
+
+            let window = window;
+            spawn_local(async move {
+                let (device, queue, surface_state) = init_wgpu(window).await;
+                APP_STATE.with(|app_state| {
+                    if let Some(runner) = *app_state.borrow() {
                         unsafe {
-                            // Get NSWindow from the handle
-                            // The ns_view field contains the content view
-                            let content_view_ptr: *mut AnyObject = handle.ns_view.as_ptr() as *mut AnyObject;
-                            
-                            if !content_view_ptr.is_null() {
-                                // Set the content view as the root view in the manager
-                                manager.set_root_view(spark_native_apple::NativeViewHandle::AppKit(content_view_ptr));
-                                
-                                // Create content view wrapper
-                                let content_view = NSView::from_ptr(content_view_ptr);
-                                
-                                // Add all registered native views to the content view
-                                let view_count = manager.get_all_views().len();
-                                for (_widget_id, view_handle) in manager.get_all_views() {
-                                    match view_handle {
-                                        spark_native_apple::NativeViewHandle::AppKit(ptr) => {
-                                            // Create NSView wrapper from pointer
-                                            let native_view = NSView::from_ptr(*ptr);
-                                            content_view.add_subview(&native_view);
-                                            native_view.set_visible(true);
-                                            native_view.set_wants_layer(true);
-                                            // Bring to front to ensure visibility
-                                            native_view.bring_to_front();
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                
-                                eprintln!("Embedded {} native views into window content view", view_count);
-                            } else {
-                                eprintln!("Warning: Content view is null, cannot embed native views");
-                            }
+                            (*runner).set_pending_state(PendingState {
+                                window,
+                                device,
+                                queue,
+                                surface_state,
+                            });
                         }
-                    } else {
-                        eprintln!("Warning: Window handle is not AppKit type");
                     }
-                } else {
-                    eprintln!("Warning: Failed to get raw window handle");
-                }
-            }
-            
-                // Update layouts again now that views are embedded
-                // Filter layouts to only include registered native widgets
-                let native_widget_ids: Vec<_> = manager.get_all_views().keys().copied().collect();
-                let layouts: std::collections::HashMap<_, _> = all_layouts
-                    .into_iter()
-                    .filter(|(id, _)| native_widget_ids.contains(id))
-                    .collect();
-                
-                // Convert physical pixels to logical pixels for parent_height
-                // The layout was computed with logical pixels, so we need logical height
-                let window_height_logical = (size.height as f32) / scale_factor;
-                manager.update_layouts(
-                    &layouts,
-                    window_height_logical,
-                    scale_factor,
-                );
-            }
+                });
+            });
         }
     }
 
