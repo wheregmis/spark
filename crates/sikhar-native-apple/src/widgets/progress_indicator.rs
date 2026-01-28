@@ -2,9 +2,18 @@
 
 use sikhar_input::InputEvent;
 use sikhar_layout::{taffy, WidgetId};
-use sikhar_widgets::{EventContext, EventResponse, Widget};
+use sikhar_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
 use crate::NativeWidgetExt as _;
+
+/// Default minimum width for progress indicators (in logical pixels)
+const DEFAULT_MIN_PROGRESS_WIDTH: f32 = 100.0;
+/// Default height for bar-style progress indicators (in logical pixels)
+const DEFAULT_BAR_HEIGHT: f32 = 5.0;
+/// Default size for spinning progress indicators (in logical pixels)
+const DEFAULT_SPINNER_SIZE: f32 = 20.0;
+/// Preferred width for progress indicators (in logical pixels)
+const DEFAULT_PREFERRED_PROGRESS_WIDTH: f32 = 200.0;
 
 /// Native progress indicator widget.
 pub struct NativeProgressIndicator {
@@ -17,6 +26,8 @@ pub struct NativeProgressIndicator {
     min_value: f64,
     max_value: f64,
     indeterminate: bool,
+    /// Preferred width (can be customized)
+    preferred_width: f32,
 }
 
 impl NativeProgressIndicator {
@@ -32,6 +43,7 @@ impl NativeProgressIndicator {
             min_value: 0.0,
             max_value: 100.0,
             indeterminate: false,
+            preferred_width: DEFAULT_PREFERRED_PROGRESS_WIDTH,
         };
         indicator.update_native_values();
         indicator
@@ -73,6 +85,12 @@ impl NativeProgressIndicator {
         }
         self
     }
+    
+    /// Set the preferred width for the progress indicator.
+    pub fn width(mut self, width: f32) -> Self {
+        self.preferred_width = width.max(DEFAULT_MIN_PROGRESS_WIDTH);
+        self
+    }
 
     fn update_native_values(&mut self) {
         #[cfg(target_os = "macos")]
@@ -89,6 +107,33 @@ impl NativeProgressIndicator {
             self.indicator.set_progress(progress);
         }
     }
+    
+    /// Get the preferred size for this progress indicator.
+    fn preferred_size(&self) -> (f32, f32) {
+        if self.indeterminate {
+            // Spinning indicator is square
+            (DEFAULT_SPINNER_SIZE, DEFAULT_SPINNER_SIZE)
+        } else {
+            #[cfg(target_os = "macos")]
+            {
+                let (intrinsic_width, intrinsic_height) = self.indicator.intrinsic_content_size();
+                let height = if intrinsic_height > 0.0 {
+                    intrinsic_height as f32
+                } else {
+                    DEFAULT_BAR_HEIGHT
+                };
+                (self.preferred_width, height)
+            }
+            #[cfg(target_os = "ios")]
+            {
+                (self.preferred_width, 4.0) // iOS standard progress bar height
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            {
+                (self.preferred_width, DEFAULT_BAR_HEIGHT)
+            }
+        }
+    }
 }
 
 impl Widget for NativeProgressIndicator {
@@ -102,12 +147,34 @@ impl Widget for NativeProgressIndicator {
 
     fn style(&self) -> taffy::Style {
         use taffy::prelude::*;
-        taffy::Style {
-            size: Size {
-                width: length(200.0),
-                height: if self.indeterminate { length(20.0) } else { length(10.0) },
-            },
-            ..Default::default()
+        let (pref_width, pref_height) = self.preferred_size();
+        
+        if self.indeterminate {
+            // Spinning indicator has fixed size
+            taffy::Style {
+                size: Size {
+                    width: length(pref_width),
+                    height: length(pref_height),
+                },
+                flex_shrink: 0.0,
+                ..Default::default()
+            }
+        } else {
+            // Bar indicator can flex
+            taffy::Style {
+                min_size: Size {
+                    width: length(DEFAULT_MIN_PROGRESS_WIDTH),
+                    height: length(pref_height),
+                },
+                size: Size {
+                    width: length(pref_width),
+                    height: length(pref_height),
+                },
+                // Allow flexible growth but don't shrink below min_size
+                flex_grow: 1.0,
+                flex_shrink: 0.0,
+                ..Default::default()
+            }
         }
     }
 
@@ -125,6 +192,10 @@ impl Widget for NativeProgressIndicator {
     
     fn is_native(&self) -> bool {
         true
+    }
+    
+    fn measure(&self, _ctx: &mut LayoutContext) -> Option<(f32, f32)> {
+        Some(self.preferred_size())
     }
     
     fn register_native(&self, widget_id: WidgetId, register: &mut dyn FnMut(WidgetId, *mut std::ffi::c_void)) {

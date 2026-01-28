@@ -2,11 +2,18 @@
 
 use sikhar_input::InputEvent;
 use sikhar_layout::{taffy, WidgetId};
-use sikhar_widgets::{EventContext, EventResponse, Widget};
+use sikhar_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
 use crate::NativeWidgetExt as _;
 use std::sync::Arc;
 use std::sync::Mutex;
+
+/// Default minimum width for buttons (in logical pixels)
+const DEFAULT_MIN_BUTTON_WIDTH: f32 = 80.0;
+/// Default minimum height for buttons (in logical pixels)
+const DEFAULT_MIN_BUTTON_HEIGHT: f32 = 22.0;
+/// Padding added to intrinsic button size
+const BUTTON_PADDING: f32 = 16.0;
 
 /// Native button widget.
 pub struct NativeButton {
@@ -18,6 +25,8 @@ pub struct NativeButton {
     title: String,
     on_click: Option<Box<dyn Fn() + Send + Sync>>,
     pending_events: Arc<Mutex<Vec<InputEvent>>>,
+    /// Cached intrinsic size (width, height)
+    cached_size: Option<(f32, f32)>,
 }
 
 impl NativeButton {
@@ -33,9 +42,12 @@ impl NativeButton {
             title: title.clone(),
             on_click: None,
             pending_events: Arc::new(Mutex::new(Vec::new())),
+            cached_size: None,
         };
         // Set the title on the native button
         button.set_title(&title);
+        // Cache the intrinsic size
+        button.update_cached_size();
         button
     }
 
@@ -46,6 +58,8 @@ impl NativeButton {
         self.button.set_title(&self.title);
         #[cfg(target_os = "ios")]
         self.button.set_title(&self.title, crate::ffi::uikit::UIControlState::Normal);
+        // Invalidate cached size when title changes
+        self.update_cached_size();
     }
 
     /// Set the click callback.
@@ -55,6 +69,41 @@ impl NativeButton {
     {
         self.on_click = Some(Box::new(callback));
         self
+    }
+    
+    /// Update the cached intrinsic size from the native view.
+    fn update_cached_size(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            // Size the button to fit its content first
+            self.button.size_to_fit();
+            // Get the intrinsic size
+            let (width, height) = self.button.intrinsic_content_size();
+            // If intrinsic size is valid, use it; otherwise estimate based on title
+            if width > 0.0 && height > 0.0 {
+                self.cached_size = Some((width as f32, height as f32));
+            } else {
+                // Estimate: roughly 8 pixels per character + padding
+                let estimated_width = (self.title.len() as f32 * 8.0 + BUTTON_PADDING * 2.0).max(DEFAULT_MIN_BUTTON_WIDTH);
+                self.cached_size = Some((estimated_width, DEFAULT_MIN_BUTTON_HEIGHT));
+            }
+        }
+        #[cfg(target_os = "ios")]
+        {
+            // On iOS, use a similar estimation approach
+            let estimated_width = (self.title.len() as f32 * 8.0 + BUTTON_PADDING * 2.0).max(DEFAULT_MIN_BUTTON_WIDTH);
+            self.cached_size = Some((estimated_width, 44.0)); // iOS standard button height
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            let estimated_width = (self.title.len() as f32 * 8.0 + BUTTON_PADDING * 2.0).max(DEFAULT_MIN_BUTTON_WIDTH);
+            self.cached_size = Some((estimated_width, DEFAULT_MIN_BUTTON_HEIGHT));
+        }
+    }
+    
+    /// Get the preferred size for this button.
+    pub fn preferred_size(&self) -> (f32, f32) {
+        self.cached_size.unwrap_or((DEFAULT_MIN_BUTTON_WIDTH, DEFAULT_MIN_BUTTON_HEIGHT))
     }
 }
 
@@ -69,11 +118,20 @@ impl Widget for NativeButton {
 
     fn style(&self) -> taffy::Style {
         use taffy::prelude::*;
+        let (pref_width, pref_height) = self.preferred_size();
         taffy::Style {
+            // Use min_size to ensure the button has at least its intrinsic size
+            min_size: Size {
+                width: length(pref_width),
+                height: length(pref_height),
+            },
+            // Allow the button to grow but prefer its intrinsic size
             size: Size {
                 width: auto(),
-                height: length(30.0),
+                height: length(pref_height),
             },
+            // Don't shrink below intrinsic size
+            flex_shrink: 0.0,
             ..Default::default()
         }
     }
@@ -92,6 +150,10 @@ impl Widget for NativeButton {
     
     fn is_native(&self) -> bool {
         true
+    }
+    
+    fn measure(&self, _ctx: &mut LayoutContext) -> Option<(f32, f32)> {
+        Some(self.preferred_size())
     }
     
     fn register_native(&self, widget_id: WidgetId, register: &mut dyn FnMut(WidgetId, *mut std::ffi::c_void)) {
