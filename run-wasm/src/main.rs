@@ -1,5 +1,5 @@
 fn main() {
-    cargo_run_wasm::run_wasm_with_css(
+    cargo_run_wasm::run_wasm_cli_with_css(
         r#"
         html, body {
             margin: 0;
@@ -17,4 +17,3 @@ fn main() {
         "#,
     );
 }
-
