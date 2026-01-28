@@ -40,7 +40,7 @@ fn color_box(hex: u32, width: f32, height: f32) -> Container {
 
 fn build_ui() -> Box<dyn Widget> {
     Box::new(
-        Scroll::new().vertical().debug_overlay(true).content(
+        Scroll::new().vertical().fill().debug_overlay(true).content(
             Container::new()
                 .column()
                 .gap(24.0)
