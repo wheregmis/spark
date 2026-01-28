@@ -1,8 +1,8 @@
-//! Counter app demonstrating stateful widgets in Sikhar.
+//! Counter app demonstrating stateful widgets in Spark.
 
-use sikhar::prelude::*;
-use sikhar::text::TextStyle;
-use sikhar::widgets::{LayoutContext, PaintContext, Widget, WidgetId};
+use spark::prelude::*;
+use spark::text::TextStyle;
+use spark::widgets::{LayoutContext, PaintContext, Widget, WidgetId};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub fn run_counter() {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn wasm_main() {
-    sikhar::init_web();
+    spark::init_web();
     run_counter();
 }
 
@@ -61,8 +61,8 @@ impl Widget for CounterApp {
         self.id = id;
     }
 
-    fn style(&self) -> sikhar::layout::taffy::Style {
-        use sikhar::layout::taffy::prelude::*;
+    fn style(&self) -> spark::layout::taffy::Style {
+        use spark::layout::taffy::prelude::*;
         Style {
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
@@ -113,8 +113,8 @@ impl Widget for CounterDisplay {
         self.id = id;
     }
 
-    fn style(&self) -> sikhar::layout::taffy::Style {
-        use sikhar::layout::taffy::prelude::*;
+    fn style(&self) -> spark::layout::taffy::Style {
+        use spark::layout::taffy::prelude::*;
         Style {
             min_size: Size {
                 width: length(200.0),
@@ -226,8 +226,8 @@ impl Widget for CounterControls {
         self.id = id;
     }
 
-    fn style(&self) -> sikhar::layout::taffy::Style {
-        use sikhar::layout::taffy::prelude::*;
+    fn style(&self) -> spark::layout::taffy::Style {
+        use spark::layout::taffy::prelude::*;
         Style {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,

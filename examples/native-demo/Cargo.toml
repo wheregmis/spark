@@ -8,8 +8,8 @@ name = "native-demo"
 path = "src/main.rs"
 
 [dependencies]
-sikhar = { path = "../../crates/sikhar" }
-sikhar-widgets = { path = "../../crates/sikhar-widgets" }
+spark = { path = "../../crates/spark" }
+spark-widgets = { path = "../../crates/spark-widgets" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-sikhar-native-apple = { path = "../../crates/sikhar-native-apple" }
+spark-native-apple = { path = "../../crates/spark-native-apple" }

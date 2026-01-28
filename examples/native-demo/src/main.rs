@@ -1,6 +1,6 @@
 //! Comprehensive native macOS widget demo.
 //!
-//! This example showcases various native Apple widgets integrated with Sikhar.
+//! This example showcases various native Apple widgets integrated with Spark.
 //! Note: This example only works on macOS and iOS platforms.
 //!
 //! The layout uses adaptive sizing from Flutter's adaptive_platform_ui approach:
@@ -8,11 +8,11 @@
 //! - Containers use flexible layout with proper spacing
 //! - Platform-specific sizing is handled automatically
 
-use sikhar::prelude::*;
-use sikhar_widgets::Container;
+use spark::prelude::*;
+use spark_widgets::Container;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-use sikhar_native_apple::widgets::{
+use spark_native_apple::widgets::{
     NativeButton, NativeLabel, NativeProgressIndicator, NativeSlider, NativeSwitch, NativeTextField,
 };
 

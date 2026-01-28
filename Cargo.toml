@@ -1,13 +1,13 @@
 [workspace]
 members = [
-    "crates/sikhar-core",
-    "crates/sikhar-render",
-    "crates/sikhar-layout",
-    "crates/sikhar-text",
-    "crates/sikhar-input",
-    "crates/sikhar-widgets",
-    "crates/sikhar-native-apple",
-    "crates/sikhar",
+    "crates/spark-core",
+    "crates/spark-render",
+    "crates/spark-layout",
+    "crates/spark-text",
+    "crates/spark-input",
+    "crates/spark-widgets",
+    "crates/spark-native-apple",
+    "crates/spark",
     "examples/triangle",
     "examples/demo",
     "examples/counter",
@@ -48,13 +48,13 @@ accesskit = "0.21"
 accesskit_winit = "0.29"
 
 # Internal crates
-sikhar-core = { path = "crates/sikhar-core" }
-sikhar-render = { path = "crates/sikhar-render" }
-sikhar-layout = { path = "crates/sikhar-layout" }
-sikhar-text = { path = "crates/sikhar-text" }
-sikhar-input = { path = "crates/sikhar-input" }
-sikhar-widgets = { path = "crates/sikhar-widgets" }
-sikhar-native-apple = { path = "crates/sikhar-native-apple" }
+spark-core = { path = "crates/spark-core" }
+spark-render = { path = "crates/spark-render" }
+spark-layout = { path = "crates/spark-layout" }
+spark-text = { path = "crates/spark-text" }
+spark-input = { path = "crates/spark-input" }
+spark-widgets = { path = "crates/spark-widgets" }
+spark-native-apple = { path = "crates/spark-native-apple" }
 
 # Web dependencies (add to workspace.dependencies for individual crates)
 wasm-bindgen = "0.2"

@@ -1,12 +1,12 @@
-//! Demo application showcasing the Sikhar UI framework.
+//! Demo application showcasing the Spark UI framework.
 
-use sikhar::prelude::*;
+use spark::prelude::*;
 
 fn main() {
     env_logger::init();
 
     App::new()
-        .with_title("Sikhar Demo")
+        .with_title("Spark Demo")
         .with_size(800, 600)
         .with_background(Color::from_hex(0x1F2937)) // Dark background
         .run(build_ui);

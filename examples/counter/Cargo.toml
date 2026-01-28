@@ -13,7 +13,7 @@ name = "counter"
 path = "src/bin.rs"
 
 [dependencies]
-sikhar = { path = "../../crates/sikhar" }
+spark = { path = "../../crates/spark" }
 env_logger = { workspace = true }
 log = { workspace = true }
 

@@ -1,4 +1,4 @@
-# Sikhar
+# Spark
 
 A GPU-first cross-platform UI framework in Rust, built on `wgpu` and `winit`.
 
@@ -17,16 +17,16 @@ A GPU-first cross-platform UI framework in Rust, built on `wgpu` and `winit`.
 │                    Application Layer                         │
 │              (User code: components, state)                  │
 ├─────────────────────────────────────────────────────────────┤
-│                    sikhar (facade)                           │
+│                    spark (facade)                           │
 │              App runner, context, hooks                      │
 ├─────────────────────────────────────────────────────────────┤
-│  sikhar-widgets  │  sikhar-input   │  sikhar-layout          │
+│  spark-widgets  │  spark-input   │  spark-layout          │
 │  (Button, Input) │  (Events, Focus)│  (Flexbox/taffy)        │
 ├─────────────────────────────────────────────────────────────┤
-│                    sikhar-render                             │
+│                    spark-render                             │
 │     DrawList, ShapePass, TextPass, batching, sorting         │
 ├─────────────────────────────────────────────────────────────┤
-│                    sikhar-core                               │
+│                    spark-core                               │
 │     Pipeline<U>, wgpu init, uniform buffers, shaders         │
 ├─────────────────────────────────────────────────────────────┤
 │                    Platform (wgpu + winit)                   │
@@ -38,18 +38,18 @@ A GPU-first cross-platform UI framework in Rust, built on `wgpu` and `winit`.
 
 | Crate | Description |
 |-------|-------------|
-| `sikhar` | Main facade crate with App runner |
-| `sikhar-core` | GPU primitives, pipelines, vertex buffers |
-| `sikhar-render` | DrawList, shape/text rendering passes |
-| `sikhar-layout` | Flexbox layout via taffy |
-| `sikhar-text` | Font loading, text shaping, glyph atlas |
-| `sikhar-input` | Event types, focus management, hit testing |
-| `sikhar-widgets` | Widget trait and basic widgets |
+| `spark` | Main facade crate with App runner |
+| `spark-core` | GPU primitives, pipelines, vertex buffers |
+| `spark-render` | DrawList, shape/text rendering passes |
+| `spark-layout` | Flexbox layout via taffy |
+| `spark-text` | Font loading, text shaping, glyph atlas |
+| `spark-input` | Event types, focus management, hit testing |
+| `spark-widgets` | Widget trait and basic widgets |
 
 ## Quick Start
 
 ```rust
-use sikhar::prelude::*;
+use spark::prelude::*;
 
 fn main() {
     App::new()

@@ -1,0 +1,16 @@
+[package]
+name = "spark-widgets"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+spark-core = { workspace = true }
+spark-render = { workspace = true }
+spark-layout = { workspace = true }
+spark-text = { workspace = true }
+spark-input = { workspace = true }
+glam = { workspace = true }
+taffy = { workspace = true }
+wgpu = { workspace = true }
+

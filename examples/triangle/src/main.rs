@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use sikhar_core::{pipeline::Pipeline, wgpu_init::init_wgpu};
+use spark_core::{pipeline::Pipeline, wgpu_init::init_wgpu};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Debug)]
@@ -11,7 +11,7 @@ pub struct SceneUniform {
 struct App {
     device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
-    surface_state: Option<sikhar_core::wgpu_init::SurfaceState<'static>>, // demo uses leak to satisfy lifetimes
+    surface_state: Option<spark_core::wgpu_init::SurfaceState<'static>>, // demo uses leak to satisfy lifetimes
     pipeline: Option<Pipeline<SceneUniform>>,
     start: Instant,
 }
@@ -25,7 +25,7 @@ impl Default for App {
 impl winit::application::ApplicationHandler for App {
     fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
         let window = event_loop
-            .create_window(winit::window::WindowAttributes::default().with_title("sikhar triangle"))
+            .create_window(winit::window::WindowAttributes::default().with_title("spark triangle"))
             .expect("create window");
         let window_leaked: &'static mut Box<dyn winit::window::Window> = Box::leak(Box::new(window));
         let window: &'static dyn winit::window::Window = &**window_leaked;
