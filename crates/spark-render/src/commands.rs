@@ -23,6 +23,12 @@ pub enum DrawCommand {
     },
     /// Pop the current clip rectangle.
     PopClip,
+    /// Push a translation offset (affects all subsequent draw commands).
+    PushTranslation {
+        offset: (f32, f32),
+    },
+    /// Pop the current translation offset.
+    PopTranslation,
 }
 
 impl DrawCommand {
@@ -128,6 +134,16 @@ impl DrawList {
         self.push(DrawCommand::PopClip);
     }
 
+    /// Push a translation offset for subsequent draw commands.
+    pub fn push_translation(&mut self, offset: (f32, f32)) {
+        self.push(DrawCommand::PushTranslation { offset });
+    }
+
+    /// Pop the current translation offset.
+    pub fn pop_translation(&mut self) {
+        self.push(DrawCommand::PopTranslation);
+    }
+
     /// Get all commands.
     pub fn commands(&self) -> &[DrawCommand] {
         &self.commands
@@ -148,4 +164,3 @@ impl DrawList {
         self.commands.len()
     }
 }
-

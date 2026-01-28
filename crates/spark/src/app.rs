@@ -147,14 +147,20 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         fn add_to_layout(
             widget: &mut dyn Widget,
             tree: &mut LayoutTree,
+            in_scroll: bool,
         ) -> spark_layout::WidgetId {
-            let style = widget.style();
+            let mut style = widget.style();
+            if in_scroll {
+                style.flex_shrink = 0.0;
+            }
+            let is_scroll = widget.is_scroll_container();
             let children_ids: Vec<_> = widget
                 .children_mut()
                 .iter_mut()
                 .map(|child| add_to_layout(
                     child.as_mut(),
                     tree,
+                    in_scroll || is_scroll,
                 ))
                 .collect();
 
@@ -214,6 +220,7 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         let root_id = add_to_layout(
             state.root_widget.as_mut(),
             &mut state.layout_tree,
+            false,
         );
         state.layout_tree.set_root(root_id);
 
@@ -335,6 +342,7 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
                 let mut ctx = PaintContext {
                     draw_list,
                     layout: scaled_layout,
+                    layout_tree,
                     focus,
                     widget_id: id,
                     scale_factor,
@@ -361,6 +369,9 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
                         native_view_manager,
                     );
                 }
+
+                // Call after-paint hook for cleanup (e.g., pop transforms/clips)
+                widget.paint_after_children(&mut ctx);
             }
         }
 

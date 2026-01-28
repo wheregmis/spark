@@ -30,6 +30,8 @@ pub struct PaintContext<'a> {
     pub draw_list: &'a mut DrawList,
     /// The computed layout for this widget.
     pub layout: ComputedLayout,
+    /// The layout tree for querying child layouts.
+    pub layout_tree: &'a LayoutTree,
     /// The focus manager (for focus state).
     pub focus: &'a FocusManager,
     /// Current widget ID.
@@ -96,6 +98,17 @@ impl<'a> PaintContext<'a> {
     /// Pop the clip rectangle.
     pub fn pop_clip(&mut self) {
         self.draw_list.pop_clip();
+    }
+
+    /// Push a translation offset for subsequent draw commands.
+    /// The offset is in physical pixels.
+    pub fn push_translation(&mut self, offset: (f32, f32)) {
+        self.draw_list.push_translation(offset);
+    }
+
+    /// Pop the current translation offset.
+    pub fn pop_translation(&mut self) {
+        self.draw_list.pop_translation();
     }
 
     /// Draw text at the specified position.
@@ -228,4 +241,3 @@ impl<'a> EventContext<'a> {
         )
     }
 }
-

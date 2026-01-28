@@ -100,6 +100,12 @@ pub trait Widget {
     /// Paint this widget to the draw list.
     fn paint(&self, ctx: &mut super::PaintContext);
 
+    /// Called after children have been painted.
+    /// Use this to clean up clips/transforms pushed in paint().
+    fn paint_after_children(&self, _ctx: &mut super::PaintContext) {
+        // Default: no-op
+    }
+
     /// Handle an input event.
     fn event(&mut self, ctx: &mut super::EventContext, event: &InputEvent) -> EventResponse {
         let _ = (ctx, event);
@@ -124,6 +130,11 @@ pub trait Widget {
 
     /// Whether this widget can receive keyboard focus.
     fn focusable(&self) -> bool {
+        false
+    }
+
+    /// Whether this widget is a scroll container.
+    fn is_scroll_container(&self) -> bool {
         false
     }
 
@@ -152,4 +163,3 @@ pub trait Widget {
         // Default: do nothing
     }
 }
-

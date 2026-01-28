@@ -11,6 +11,7 @@ pub struct Renderer {
     text_pass: TextPass,
     globals: GlobalUniforms,
     clip_stack: Vec<Rect>,
+    translation_stack: Vec<(f32, f32)>,
 }
 
 impl Renderer {
@@ -21,6 +22,7 @@ impl Renderer {
             text_pass: TextPass::new(device, format),
             globals: GlobalUniforms::default(),
             clip_stack: Vec::new(),
+            translation_stack: vec![(0.0, 0.0)],
         }
     }
 
@@ -46,6 +48,8 @@ impl Renderer {
         self.shape_pass.clear();
         self.text_pass.clear();
         self.clip_stack.clear();
+        self.translation_stack.clear();
+        self.translation_stack.push((0.0, 0.0));
 
         for command in draw_list.commands() {
             match command {
@@ -56,14 +60,21 @@ impl Renderer {
                     border_width,
                     border_color,
                 } => {
+                    let translation = self.translation_stack.last().copied().unwrap_or((0.0, 0.0));
+                    let translated_bounds = Rect::new(
+                        bounds.x + translation.0,
+                        bounds.y + translation.1,
+                        bounds.width,
+                        bounds.height,
+                    );
                     // Apply clipping if needed
                     let clipped_bounds = if let Some(clip) = self.clip_stack.last() {
-                        match bounds.intersection(clip) {
+                        match translated_bounds.intersection(clip) {
                             Some(b) => b,
                             None => continue, // Fully clipped, skip
                         }
                     } else {
-                        *bounds
+                        translated_bounds
                     };
 
                     self.shape_pass.add_rect(
@@ -76,19 +87,50 @@ impl Renderer {
                 }
                 DrawCommand::Text { glyphs } => {
                     // TODO: Apply clipping to glyphs
-                    self.text_pass.add_glyphs(glyphs);
+                    let translation = self.translation_stack.last().copied().unwrap_or((0.0, 0.0));
+                    if translation == (0.0, 0.0) {
+                        self.text_pass.add_glyphs(glyphs);
+                    } else {
+                        let mut translated = Vec::with_capacity(glyphs.len());
+                        for glyph in glyphs {
+                            let mut translated_glyph = *glyph;
+                            translated_glyph.pos[0] += translation.0;
+                            translated_glyph.pos[1] += translation.1;
+                            translated.push(translated_glyph);
+                        }
+                        self.text_pass.add_glyphs(&translated);
+                    }
                 }
                 DrawCommand::PushClip { bounds } => {
+                    let translation = self.translation_stack.last().copied().unwrap_or((0.0, 0.0));
+                    let translated_bounds = Rect::new(
+                        bounds.x + translation.0,
+                        bounds.y + translation.1,
+                        bounds.width,
+                        bounds.height,
+                    );
                     // Intersect with current clip if any
                     let new_clip = if let Some(current) = self.clip_stack.last() {
-                        bounds.intersection(current).unwrap_or(Rect::ZERO)
+                        translated_bounds
+                            .intersection(current)
+                            .unwrap_or(Rect::ZERO)
                     } else {
-                        *bounds
+                        translated_bounds
                     };
                     self.clip_stack.push(new_clip);
                 }
                 DrawCommand::PopClip => {
                     self.clip_stack.pop();
+                }
+                DrawCommand::PushTranslation { offset } => {
+                    let current = self.translation_stack.last().copied().unwrap_or((0.0, 0.0));
+                    self.translation_stack
+                        .push((current.0 + offset.0, current.1 + offset.1));
+                }
+                DrawCommand::PopTranslation => {
+                    if self.translation_stack.len() > 1 {
+                        self.translation_stack.pop();
+                    }
                 }
             }
         }
@@ -138,4 +180,3 @@ impl Renderer {
         self.text_pass.instance_count()
     }
 }
-
