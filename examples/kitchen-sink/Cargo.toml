@@ -1,0 +1,13 @@
+[package]
+name = "kitchen-sink"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "kitchen-sink"
+path = "src/main.rs"
+
+[dependencies]
+spark = { path = "../../crates/spark" }
+env_logger = { workspace = true }
+log = { workspace = true }

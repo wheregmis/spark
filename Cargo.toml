@@ -12,6 +12,8 @@ members = [
     "examples/demo",
     "examples/counter",
     "examples/native-demo",
+    "examples/layout",
+    "examples/kitchen-sink",
 ]
 resolver = "2"
 
