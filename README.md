@@ -7,8 +7,9 @@ A GPU-first cross-platform UI framework in Rust, built on `wgpu` and `winit`.
 - **GPU-Accelerated Rendering** - All rendering uses wgpu with instanced drawing for shapes and text
 - **Flexbox Layout** - Powered by [taffy](https://github.com/DioxusLabs/taffy) for familiar CSS-like layouts
 - **Cross-Platform** - Desktop (Windows, macOS, Linux) and Web (via WebGPU)
-- **Modern Text Rendering** - Using [cosmic-text](https://github.com/pop-os/cosmic-text) for font shaping
+- **Modern Text Rendering** - Using [parley](https://github.com/linebender/parley) + [swash](https://github.com/dfrg/swash) for shaping and rasterization
 - **W3C-Compliant Events** - Using [ui-events](https://github.com/endoli/ui-events) for input handling
+- **Accessibility** - Using [accesskit](https://github.com/AccessKit/accesskit) for native assistive tech
 
 ## Architecture
 
@@ -33,6 +34,12 @@ A GPU-first cross-platform UI framework in Rust, built on `wgpu` and `winit`.
 │            Desktop (Vulkan/Metal/DX12) | Web (WebGPU)        │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Platform Support
+
+- **Desktop**: Windows, macOS, Linux (Vulkan/Metal/DX12)
+- **Web**: WebAssembly + WebGPU (see `counter` example)
+- **Apple Native**: AppKit/UIKit widget integration via `spark-native-apple`
 
 ## Crates
 
@@ -72,6 +79,7 @@ fn main() {
 
 - **Container** - Flexbox container for layout
 - **Button** - Clickable button with hover/press states
+- **Text** - Rich text rendering with alignment and styling
 - **TextInput** - Single-line text input with cursor
 - **Scroll** - Scrollable container
 
@@ -83,6 +91,19 @@ cargo run -p demo --release
 
 # Run the original triangle example
 cargo run -p triangle --release
+
+# Run the counter example
+cargo run -p counter --release
+
+# Run native Apple widget demo (macOS/iOS only)
+cargo run -p native-demo --release
+```
+
+### WebAssembly
+
+```bash
+# Build the counter example for WebAssembly
+cargo build -p counter --release --target wasm32-unknown-unknown
 ```
 
 ## Frame Loop
@@ -116,10 +137,16 @@ cargo run -p triangle --release
 | `wgpu` | GPU abstraction |
 | `winit` | Windowing (desktop + web) |
 | `taffy` | Flexbox layout engine |
-| `cosmic-text` | Text shaping + rasterization |
+| `parley` | Text layout + shaping |
+| `swash` | Font rasterization |
 | `ui-events` | W3C-compliant input events |
+| `ui-events-winit` | Winit integration for input events |
+| `accesskit` | Accessibility tree + actions |
+| `accesskit_winit` | Winit accessibility adapter |
 | `bytemuck` | Safe GPU buffer casts |
 | `glam` | Math types (Vec2, Mat4) |
+| `slotmap` | Handle-based collections |
+| `rustc-hash` | Fast hash maps/sets |
 
 ## References
 
