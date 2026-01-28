@@ -12,7 +12,6 @@ members = [
     "examples/demo",
     "examples/counter",
     "examples/native-demo",
-    "run-wasm",
 ]
 resolver = "2"
 
