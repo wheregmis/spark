@@ -571,17 +571,14 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
                                 // Add all registered native views to the content view
                                 let view_count = manager.get_all_views().len();
                                 for (_widget_id, view_handle) in manager.get_all_views() {
-                                    match view_handle {
-                                        spark_native_apple::NativeViewHandle::AppKit(ptr) => {
-                                            // Create NSView wrapper from pointer
-                                            let native_view = NSView::from_ptr(*ptr);
-                                            content_view.add_subview(&native_view);
-                                            native_view.set_visible(true);
-                                            native_view.set_wants_layer(true);
-                                            // Bring to front to ensure visibility
-                                            native_view.bring_to_front();
-                                        }
-                                        _ => {}
+                                    if let spark_native_apple::NativeViewHandle::AppKit(ptr) = view_handle {
+                                        // Create NSView wrapper from pointer
+                                        let native_view = NSView::from_ptr(*ptr);
+                                        content_view.add_subview(&native_view);
+                                        native_view.set_visible(true);
+                                        native_view.set_wants_layer(true);
+                                        // Bring to front to ensure visibility
+                                        native_view.bring_to_front();
                                     }
                                 }
                                 

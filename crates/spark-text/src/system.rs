@@ -296,6 +296,13 @@ impl TextSystem {
             let cached = if let Some(cached) = self.atlas.get(&key) {
                 *cached
             } else {
+                let glyph_id_u16 = match u16::try_from(glyph_id) {
+                    Ok(id) => id,
+                    Err(_) => {
+                        cursor_x += glyph.advance;
+                        continue;
+                    }
+                };
                 // Rasterize the glyph using swash
                 let mut scaler = self
                     .scale_cx
@@ -312,7 +319,7 @@ impl TextSystem {
                 ])
                 .format(Format::Alpha)
                 .offset(Vector::new(0.0, 0.0))
-                .render(&mut scaler, glyph_id);
+                .render(&mut scaler, glyph_id_u16);
 
                 match image {
                     Some(img) => {

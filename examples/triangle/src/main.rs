@@ -18,7 +18,13 @@ struct App {
 
 impl Default for App {
     fn default() -> Self {
-        Self { device: None, queue: None, surface_state: None, pipeline: None, start: Instant::now() }
+        Self {
+            device: None,
+            queue: None,
+            surface_state: None,
+            pipeline: None,
+            start: Instant::now(),
+        }
     }
 }
 
@@ -27,7 +33,8 @@ impl winit::application::ApplicationHandler for App {
         let window = event_loop
             .create_window(winit::window::WindowAttributes::default().with_title("spark triangle"))
             .expect("create window");
-        let window_leaked: &'static mut Box<dyn winit::window::Window> = Box::leak(Box::new(window));
+        let window_leaked: &'static mut Box<dyn winit::window::Window> =
+            Box::leak(Box::new(window));
         let window: &'static dyn winit::window::Window = &**window_leaked;
 
         let (device, queue, surface_state) = pollster::block_on(init_wgpu(window));
@@ -47,8 +54,15 @@ impl winit::application::ApplicationHandler for App {
         self.start = Instant::now();
     }
 
-    fn window_event(&mut self, _event_loop: &dyn winit::event_loop::ActiveEventLoop, _id: winit::window::WindowId, event: winit::event::WindowEvent) {
-        if let (Some(device), Some(surface_state)) = (self.device.as_ref(), self.surface_state.as_mut()) {
+    fn window_event(
+        &mut self,
+        _event_loop: &dyn winit::event_loop::ActiveEventLoop,
+        _id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        if let (Some(device), Some(surface_state)) =
+            (self.device.as_ref(), self.surface_state.as_mut())
+        {
             match event {
                 winit::event::WindowEvent::SurfaceResized(size) => {
                     if size.width > 0 && size.height > 0 {
@@ -61,9 +75,12 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &dyn winit::event_loop::ActiveEventLoop) {
-        if let (Some(device), Some(queue), Some(surface_state), Some(pipeline)) =
-            (self.device.as_ref(), self.queue.as_ref(), self.surface_state.as_mut(), self.pipeline.as_mut())
-        {
+        if let (Some(device), Some(queue), Some(surface_state), Some(pipeline)) = (
+            self.device.as_ref(),
+            self.queue.as_ref(),
+            self.surface_state.as_mut(),
+            self.pipeline.as_mut(),
+        ) {
             let t = self.start.elapsed().as_secs_f32();
             let color = [t.sin() * 0.5 + 0.5, t.cos() * 0.5 + 0.5, 0.3, 1.0];
             pipeline.update_uniforms(queue, &SceneUniform { color });
@@ -75,8 +92,12 @@ impl winit::application::ApplicationHandler for App {
                     surface_state.surface.get_current_texture().unwrap()
                 }
             };
-            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("main_encoder") });
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("main_encoder"),
+            });
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("clear+draw"),
@@ -84,11 +105,15 @@ impl winit::application::ApplicationHandler for App {
                         view: &view,
                         resolve_target: None,
                         depth_slice: None,
-                        ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
                 rpass.set_pipeline(&pipeline.pipeline);
                 rpass.set_bind_group(0, &pipeline.bind_group, &[]);

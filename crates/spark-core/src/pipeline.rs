@@ -93,7 +93,7 @@ impl<U: bytemuck::Pod + bytemuck::Zeroable> Pipeline<U> {
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some(&format!("{}_layout", config.label)),
             bind_group_layouts: &all_layouts,
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let uniform = UniformBuffer::<U>::new(device);
@@ -137,7 +137,7 @@ impl<U: bytemuck::Pod + bytemuck::Zeroable> Pipeline<U> {
                 })],
                 compilation_options: PipelineCompilationOptions::default(),
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 

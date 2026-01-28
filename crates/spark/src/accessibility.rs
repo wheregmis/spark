@@ -3,7 +3,7 @@
 //! This module provides integration with AccessKit for cross-platform
 //! accessibility support (screen readers, alternative input methods, etc.)
 
-use accesskit::{Action, Node, NodeId, Role, Tree, TreeUpdate};
+use accesskit::{Action, Node, NodeId, Role, Tree, TreeId, TreeUpdate};
 use spark_layout::WidgetId;
 use std::collections::HashMap;
 
@@ -245,6 +245,7 @@ impl AccessibilityManager {
         TreeUpdate {
             nodes: vec![(self.root_id, root_node)],
             tree: Some(Tree::new(self.root_id)),
+            tree_id: TreeId::ROOT,
             focus: self.root_id,
         }
     }
@@ -304,4 +305,3 @@ mod tests {
         assert_eq!(node.label(), Some("Click Me".into()));
     }
 }
-

@@ -10,7 +10,6 @@ members = [
     "crates/spark",
     "examples/triangle",
     "examples/demo",
-    "examples/counter",
     "examples/native-demo",
     "examples/layout",
     "examples/kitchen-sink",
@@ -20,33 +19,33 @@ resolver = "2"
 [workspace.dependencies]
 # Core dependencies
 winit = "0.31.0-beta.2"
-wgpu = "27.0.1"
+wgpu = "28.0.0"
 pollster = "0.4.0"
 bytemuck = { version = "1.24.0", features = ["derive"] }
 env_logger = "0.11"
 log = "0.4"
 
 # Math
-glam = "0.30.9"
+glam = "0.31.0"
 
 # Layout
 taffy = "0.9.2"
 
 # Text
-parley = "0.5.0"
+parley = "0.7.0"
 swash = "0.2.0"
 
 # Utilities
 slotmap = "1.0"
-rustc-hash = "2.0"
+rustc-hash = "2.1.1"
 
 # Input events
-ui-events = "0.2"
-ui-events-winit = "0.2"
+ui-events = "0.3.0"
+ui-events-winit = "0.3.0"
 
 # Accessibility
-accesskit = "0.21"
-accesskit_winit = "0.29"
+accesskit = "0.23.0"
+accesskit_winit = "0.31.1"
 
 # Internal crates
 spark-core = { path = "crates/spark-core" }
