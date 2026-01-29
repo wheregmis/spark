@@ -135,6 +135,23 @@ impl NSView {
             let _: () = msg_send![self.obj, setNeedsLayout: true];
         }
     }
+
+    /// Set the appearance of the view (e.g. "NSAppearanceNameAqua").
+    pub fn set_appearance(&self, name: &str) {
+        unsafe {
+            use objc2::runtime::AnyClass;
+            use objc2_foundation::NSString;
+            
+            let class_name = c"NSAppearance";
+            let class = AnyClass::get(class_name).expect("NSAppearance class");
+            let ns_name = NSString::from_str(name);
+            
+            let appearance: *mut AnyObject = msg_send![class, appearanceNamed: &*ns_name];
+            if !appearance.is_null() {
+                let _: () = msg_send![self.obj, setAppearance: appearance];
+            }
+        }
+    }
 }
 
 impl Default for NSView {
@@ -318,6 +335,34 @@ impl NSTextField {
             let _: () = msg_send![self.view.as_ptr(), sizeToFit];
         }
     }
+
+    /// Set whether the text field is editable.
+    pub fn set_editable(&self, editable: bool) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), setEditable: editable];
+        }
+    }
+
+    /// Set whether the text field is selectable.
+    pub fn set_selectable(&self, selectable: bool) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), setSelectable: selectable];
+        }
+    }
+
+    /// Set whether the text field is bezeled.
+    pub fn set_bezeled(&self, bezeled: bool) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), setBezeled: bezeled];
+        }
+    }
+
+    /// Set whether the text field draws its background.
+    pub fn set_draws_background(&self, draws: bool) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), setDrawsBackground: draws];
+        }
+    }
 }
 
 impl Default for NSTextField {
@@ -404,14 +449,10 @@ impl NSSwitch {
         unsafe {
             use objc2::runtime::AnyClass;
             
-            let class_name = c"NSButton";
-            let class = AnyClass::get(class_name).expect("NSButton class");
+            let class_name = c"NSSwitch";
+            let class = AnyClass::get(class_name).expect("NSSwitch class (requires macOS 10.15+)");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
-            
-            // Set button type to switch
-            let button_type: i64 = 18; // NSSwitchButton
-            let _: () = msg_send![obj, setButtonType: button_type];
             
             Self {
                 view: NSView { obj },
@@ -435,12 +476,8 @@ impl NSSwitch {
     }
 
     /// Set the switch title.
-    pub fn set_title(&self, title: &str) {
-        unsafe {
-            use objc2_foundation::NSString;
-            let ns_string = NSString::from_str(title);
-            let _: () = msg_send![self.view.as_ptr(), setTitle: &*ns_string];
-        }
+    pub fn set_title(&self, _title: &str) {
+        // NSSwitch does not support titles. The label should be managed externally.
     }
 
     /// Get the underlying view.
@@ -514,6 +551,13 @@ impl NSProgressIndicator {
     pub fn set_double_value(&self, value: f64) {
         unsafe {
             let _: () = msg_send![self.view.as_ptr(), setDoubleValue: value];
+        }
+    }
+
+    /// Set whether the progress indicator is indeterminate.
+    pub fn set_indeterminate(&self, indeterminate: bool) {
+        unsafe {
+            let _: () = msg_send![self.view.as_ptr(), setIndeterminate: indeterminate];
         }
     }
 

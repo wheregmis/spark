@@ -29,7 +29,14 @@ impl NativeLabel {
         let mut label = Self {
             id: WidgetId::default(),
             #[cfg(target_os = "macos")]
-            text_field: crate::ffi::appkit::NSTextField::new(),
+            text_field: {
+                let tf = crate::ffi::appkit::NSTextField::new();
+                tf.set_editable(false);
+                tf.set_selectable(false);
+                tf.set_bezeled(false);
+                tf.set_draws_background(false);
+                tf
+            },
             #[cfg(target_os = "ios")]
             label: crate::ffi::uikit::UILabel::new(),
             text: text.clone(),
@@ -48,6 +55,13 @@ impl NativeLabel {
         #[cfg(target_os = "ios")]
         self.label.set_text(text);
         self.update_cached_size();
+    }
+
+    /// Set the appearance (e.g. "NSAppearanceNameAqua" for light mode).
+    pub fn appearance(self, name: &str) -> Self {
+        #[cfg(target_os = "macos")]
+        self.text_field.view().set_appearance(name);
+        self
     }
 
     /// Get the label text.

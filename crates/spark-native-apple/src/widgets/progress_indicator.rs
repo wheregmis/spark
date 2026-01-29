@@ -76,12 +76,21 @@ impl NativeProgressIndicator {
         {
             if indeterminate {
                 self.indicator.set_style(crate::ffi::appkit::NSProgressIndicatorStyle::Spinning);
+                self.indicator.set_indeterminate(true);
                 self.indicator.start_animation();
             } else {
                 self.indicator.set_style(crate::ffi::appkit::NSProgressIndicatorStyle::Bar);
+                self.indicator.set_indeterminate(false);
                 self.indicator.stop_animation();
             }
         }
+        self
+    }
+
+    /// Set the appearance (e.g. "NSAppearanceNameAqua" for light mode).
+    pub fn appearance(self, name: &str) -> Self {
+        #[cfg(target_os = "macos")]
+        self.indicator.view().set_appearance(name);
         self
     }
     
@@ -109,13 +118,17 @@ impl NativeProgressIndicator {
     
     /// Get the preferred size for this progress indicator.
     fn preferred_size(&self) -> (f32, f32) {
-        if self.indeterminate {
-            // Spinning indicator is square
-            (DEFAULT_SPINNER_SIZE, DEFAULT_SPINNER_SIZE)
-        } else {
-            #[cfg(target_os = "macos")]
-            {
-                let (_intrinsic_width, intrinsic_height) = self.indicator.intrinsic_content_size();
+        #[cfg(target_os = "macos")]
+        {
+            let (intrinsic_width, intrinsic_height) = self.indicator.intrinsic_content_size();
+            
+            if self.indeterminate {
+                // Spinning indicator uses intrinsic size
+                let width = if intrinsic_width > 0.0 { intrinsic_width as f32 } else { DEFAULT_SPINNER_SIZE };
+                let height = if intrinsic_height > 0.0 { intrinsic_height as f32 } else { DEFAULT_SPINNER_SIZE };
+                (width, height)
+            } else {
+                // Bar indicator uses preferred width and intrinsic height
                 let height = if intrinsic_height > 0.0 {
                     intrinsic_height as f32
                 } else {
@@ -123,12 +136,20 @@ impl NativeProgressIndicator {
                 };
                 (self.preferred_width, height)
             }
-            #[cfg(target_os = "ios")]
-            {
-                (self.preferred_width, 4.0) // iOS standard progress bar height
+        }
+        #[cfg(target_os = "ios")]
+        {
+            if self.indeterminate {
+                 (20.0, 20.0) // UIActivityIndicatorView standard size
+            } else {
+                 (self.preferred_width, 4.0) // UIProgressView standard height
             }
-            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-            {
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            if self.indeterminate {
+                (DEFAULT_SPINNER_SIZE, DEFAULT_SPINNER_SIZE)
+            } else {
                 (self.preferred_width, DEFAULT_BAR_HEIGHT)
             }
         }

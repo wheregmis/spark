@@ -9,8 +9,6 @@ use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
 const DEFAULT_MIN_SWITCH_WIDTH: f32 = 40.0;
 /// Default minimum height for switches (in logical pixels)
 const DEFAULT_MIN_SWITCH_HEIGHT: f32 = 21.0;
-/// Approximate character width for label size estimation
-const CHAR_WIDTH_ESTIMATE: f32 = 7.0;
 
 /// Native switch widget.
 pub struct NativeSwitch {
@@ -70,6 +68,13 @@ impl NativeSwitch {
         self.update_cached_size();
     }
 
+    /// Set the appearance (e.g. "NSAppearanceNameAqua" for light mode).
+    pub fn appearance(self, name: &str) -> Self {
+        #[cfg(target_os = "macos")]
+        self.switch.view().set_appearance(name);
+        self
+    }
+
     /// Set the change callback.
     pub fn on_change<F>(mut self, callback: F) -> Self
     where
@@ -83,19 +88,13 @@ impl NativeSwitch {
     fn update_cached_size(&mut self) {
         #[cfg(target_os = "macos")]
         {
-            // Size the switch to fit its content
+            // NSSwitch has a fixed size and no label
             self.switch.size_to_fit();
-            // Get the intrinsic size
             let (width, height) = self.switch.intrinsic_content_size();
-            // If intrinsic size is valid, use it; otherwise estimate
-            if width > 0.0 && height > 0.0 {
-                self.cached_size = Some((width as f32, height as f32));
-            } else {
-                // Estimate: switch + label width
-                let label_width = self.title.len() as f32 * CHAR_WIDTH_ESTIMATE;
-                let estimated_width = (DEFAULT_MIN_SWITCH_WIDTH + label_width + 8.0).max(DEFAULT_MIN_SWITCH_WIDTH);
-                self.cached_size = Some((estimated_width, DEFAULT_MIN_SWITCH_HEIGHT));
-            }
+            // Standard NSSwitch size is approx 38x21 or similar depending on OS version
+            let w = if width > 0.0 { width as f32 } else { 38.0 };
+            let h = if height > 0.0 { height as f32 } else { 21.0 };
+            self.cached_size = Some((w, h));
         }
         #[cfg(target_os = "ios")]
         {

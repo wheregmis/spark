@@ -33,7 +33,7 @@ fn main() {
                             Container::new()
                                 .gap(16.0)
                                 .fill_width() // Fill width but let height be content-based
-                                .child(NativeLabel::new("Native macOS Widgets Demo"))
+                                .child(NativeLabel::new("Native macOS Widgets Demo").appearance("NSAppearanceNameAqua"))
                                 .child(
                                     Container::new()
                                         .gap(12.0)
@@ -49,12 +49,12 @@ fn main() {
                                                         .row()
                                                         .gap(8.0)
                                                         .wrap() // Allow wrapping for smaller screens
-                                                        .child(NativeButton::new("Primary Button").on_click(
+                                                        .child(NativeButton::new("Primary Button").appearance("NSAppearanceNameAqua").on_click(
                                                             || {
                                                                 println!("Primary button clicked!");
                                                             },
                                                         ))
-                                                        .child(NativeButton::new("Secondary Button").on_click(
+                                                        .child(NativeButton::new("Secondary Button").appearance("NSAppearanceNameAqua").on_click(
                                                             || {
                                                                 println!("Secondary button clicked!");
                                                             },
@@ -103,28 +103,40 @@ fn main() {
                                                     Container::new()
                                                         .gap(8.0)
                                                         .child(
-                                                            NativeSwitch::new("Enable notifications")
-                                                                .checked(false)
-                                                                .on_change(|checked| {
-                                                                    println!(
-                                                                        "Notifications: {}",
-                                                                        if checked {
-                                                                            "enabled"
-                                                                        } else {
-                                                                            "disabled"
-                                                                        }
-                                                                    );
-                                                                }),
+                                                            Container::new()
+                                                                .row()
+                                                                .gap(12.0)
+                                                                .center()
+                                                                .child(
+                                                                    NativeSwitch::new("Enable notifications")
+                                                                        .appearance("NSAppearanceNameAqua")
+                                                                        .checked(false)
+                                                                        .on_change(|checked| {
+                                                                            println!(
+                                                                                "Notifications: {}",
+                                                                                if checked { "enabled" } else { "disabled" }
+                                                                            );
+                                                                        }),
+                                                                )
+                                                                .child(NativeLabel::new("Enable notifications").appearance("NSAppearanceNameAqua")),
                                                         )
                                                         .child(
-                                                            NativeSwitch::new("Dark mode")
-                                                                .checked(true)
-                                                                .on_change(|checked| {
-                                                                    println!(
-                                                                        "Dark mode: {}",
-                                                                        if checked { "on" } else { "off" }
-                                                                    );
-                                                                }),
+                                                            Container::new()
+                                                                .row()
+                                                                .gap(12.0)
+                                                                .center()
+                                                                .child(
+                                                                    NativeSwitch::new("Dark mode")
+                                                                        .appearance("NSAppearanceNameAqua")
+                                                                        .checked(true)
+                                                                        .on_change(|checked| {
+                                                                            println!(
+                                                                                "Dark mode: {}",
+                                                                                if checked { "on" } else { "off" }
+                                                                            );
+                                                                        }),
+                                                                )
+                                                                .child(NativeLabel::new("Dark mode").appearance("NSAppearanceNameAqua")),
                                                         ),
                                                 ),
                                         )
@@ -140,6 +152,7 @@ fn main() {
                                                         .fill_width()
                                                         .child(
                                                             NativeProgressIndicator::new()
+                                                                .appearance("NSAppearanceNameAqua")
                                                                 .min_value(0.0)
                                                                 .max_value(100.0)
                                                                 .value(45.0)
@@ -150,8 +163,8 @@ fn main() {
                                                                 .row()
                                                                 .gap(8.0)
                                                                 .center()
-                                                                .child(NativeProgressIndicator::new().indeterminate(true))
-                                                                .child(NativeLabel::new("Loading...")),
+                                                                .child(NativeProgressIndicator::new().appearance("NSAppearanceNameAqua").indeterminate(true))
+                                                                .child(NativeLabel::new("Loading...").appearance("NSAppearanceNameAqua")),
                                                         ),
                                                 ),
                                         ),

@@ -45,6 +45,8 @@ impl NativeButton {
         };
         // Set the title on the native button
         button.set_title(&title);
+        #[cfg(target_os = "macos")]
+        button.button.set_bezel_style(crate::ffi::appkit::NSBezelStyle::Rounded);
         // Cache the intrinsic size
         button.update_cached_size();
         button
@@ -67,6 +69,13 @@ impl NativeButton {
         F: Fn() + Send + Sync + 'static,
     {
         self.on_click = Some(Box::new(callback));
+        self
+    }
+
+    /// Set the appearance (e.g. "NSAppearanceNameAqua" for light mode).
+    pub fn appearance(self, name: &str) -> Self {
+        #[cfg(target_os = "macos")]
+        self.button.view().set_appearance(name);
         self
     }
     
