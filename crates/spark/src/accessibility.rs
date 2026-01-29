@@ -302,6 +302,6 @@ mod tests {
 
         let node = build_node(&info);
         assert_eq!(node.role(), Role::Button);
-        assert_eq!(node.label(), Some("Click Me".into()));
+        assert_eq!(node.label(), Some("Click Me"));
     }
 }

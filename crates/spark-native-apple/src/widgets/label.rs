@@ -1,7 +1,6 @@
 //! Native label widget (NSTextField on macOS, UILabel on iOS).
 
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
-use crate::NativeWidgetExt as _;
 use spark_input::InputEvent;
 use spark_layout::{taffy, WidgetId};
 use spark_widgets::{EventContext, EventResponse, LayoutContext, PaintContext, Widget};

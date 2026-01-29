@@ -1,12 +1,14 @@
 //! Native text field widget (NSTextField on macOS, UITextField on iOS).
 
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
-use crate::NativeWidgetExt as _;
 use spark_input::InputEvent;
 use spark_layout::{taffy, WidgetId};
 use spark_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use std::sync::Arc;
 use std::sync::Mutex;
+
+type OnChangeCallback = Box<dyn Fn(&str) + Send + Sync>;
+
 
 /// Default minimum width for text fields (in logical pixels)
 const DEFAULT_MIN_TEXT_FIELD_WIDTH: f32 = 100.0;
@@ -19,12 +21,12 @@ const DEFAULT_PREFERRED_TEXT_FIELD_WIDTH: f32 = 200.0;
 pub struct NativeTextField {
     id: WidgetId,
     #[cfg(target_os = "macos")]
-    text_field: crate::ffi::appkit::NSTextField,
+    view: crate::ffi::appkit::NSTextField,
     #[cfg(target_os = "ios")]
-    text_field: crate::ffi::uikit::UITextField,
+    view: crate::ffi::uikit::UITextField,
     text: String,
     placeholder: String,
-    on_change: Option<Box<dyn Fn(&str) + Send + Sync>>,
+    on_change: Option<OnChangeCallback>,
     pending_events: Arc<Mutex<Vec<InputEvent>>>,
     /// Preferred width (can be customized)
     preferred_width: f32,
@@ -36,9 +38,9 @@ impl NativeTextField {
         Self {
             id: WidgetId::default(),
             #[cfg(target_os = "macos")]
-            text_field: crate::ffi::appkit::NSTextField::new(),
+            view: crate::ffi::appkit::NSTextField::new(),
             #[cfg(target_os = "ios")]
-            text_field: crate::ffi::uikit::UITextField::new(),
+            view: crate::ffi::uikit::UITextField::new(),
             text: String::new(),
             placeholder: String::new(),
             on_change: None,
@@ -52,7 +54,7 @@ impl NativeTextField {
         self.placeholder = placeholder.into();
         #[cfg(target_os = "macos")]
         {
-            self.text_field.set_placeholder_string(&self.placeholder);
+            self.view.set_placeholder_string(&self.placeholder);
         }
         self
     }
@@ -61,9 +63,9 @@ impl NativeTextField {
     pub fn set_text(&mut self, text: impl Into<String>) {
         self.text = text.into();
         #[cfg(target_os = "macos")]
-        self.text_field.set_string_value(&self.text);
+        self.view.set_string_value(&self.text);
         #[cfg(target_os = "ios")]
-        self.text_field.set_text(&self.text);
+        self.view.set_text(&self.text);
     }
 
     /// Get the text value.
@@ -90,7 +92,7 @@ impl NativeTextField {
     fn preferred_size(&self) -> (f32, f32) {
         #[cfg(target_os = "macos")]
         {
-            let (intrinsic_width, intrinsic_height) = self.text_field.intrinsic_content_size();
+            let (_intrinsic_width, intrinsic_height) = self.view.intrinsic_content_size();
             let height = if intrinsic_height > 0.0 {
                 intrinsic_height as f32
             } else {
@@ -182,11 +184,11 @@ impl NativeWidget for NativeTextField {
     fn native_view(&self) -> NativeViewHandle {
         #[cfg(target_os = "macos")]
         {
-            NativeViewHandle::AppKit(self.text_field.view().as_ptr())
+            NativeViewHandle::AppKit(self.view.view().as_ptr())
         }
         #[cfg(target_os = "ios")]
         {
-            NativeViewHandle::UIKit(self.text_field.view().as_ptr())
+            NativeViewHandle::UIKit(self.view.view().as_ptr())
         }
     }
 
@@ -200,9 +202,9 @@ impl NativeWidget for NativeTextField {
 
         // Check for text changes
         #[cfg(target_os = "macos")]
-        let new_text = self.text_field.string_value();
+        let new_text = self.view.string_value();
         #[cfg(target_os = "ios")]
-        let new_text = self.text_field.text();
+        let new_text = self.view.text();
 
         if new_text != self.text {
             self.text = new_text.clone();
@@ -229,5 +231,10 @@ impl NativeWidgetExt for NativeTextField {
             }
             _ => EventResponse::default(),
         }
+    }
+}
+impl Default for NativeTextField {
+    fn default() -> Self {
+        Self::new()
     }
 }

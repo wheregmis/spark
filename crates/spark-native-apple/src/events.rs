@@ -1,6 +1,5 @@
 //! Event bridge - converts native events to Rust InputEvent types.
 
-use glam::Vec2;
 use spark_input::{InputEvent, PointerButton};
 
 /// Bridge for converting native events to Spark InputEvent types.

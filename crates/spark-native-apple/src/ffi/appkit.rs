@@ -11,6 +11,9 @@ pub struct NSView {
 impl NSView {
     /// Create an NSView from a raw pointer (unsafe).
     /// This is used when we have a pointer from the window handle.
+    /// # Safety
+    ///
+    /// The caller must ensure that the pointer is valid and points to a valid NSView (or subclass).
     pub unsafe fn from_ptr(ptr: *mut AnyObject) -> Self {
         Self { obj: ptr }
     }
@@ -23,10 +26,10 @@ impl NSView {
     /// Create a new NSView.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSView\0").unwrap();
-            let class = Class::get(class_name).expect("NSView class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSView";
+            let class = AnyClass::get(class_name).expect("NSView class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
             Self { obj }
@@ -134,6 +137,12 @@ impl NSView {
     }
 }
 
+impl Default for NSView {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for NSView {
     fn drop(&mut self) {
         // Don't release here - views are retained by their superviews
@@ -152,10 +161,10 @@ impl NSButton {
     /// Create a new NSButton.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSButton\0").unwrap();
-            let class = Class::get(class_name).expect("NSButton class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSButton";
+            let class = AnyClass::get(class_name).expect("NSButton class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
             Self {
@@ -212,6 +221,12 @@ impl NSButton {
     }
 }
 
+impl Default for NSButton {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// NSButton bezel styles.
 #[repr(i64)]
 pub enum NSBezelStyle {
@@ -244,10 +259,10 @@ impl NSTextField {
     /// Create a new NSTextField.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSTextField\0").unwrap();
-            let class = Class::get(class_name).expect("NSTextField class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSTextField";
+            let class = AnyClass::get(class_name).expect("NSTextField class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
             Self {
@@ -305,6 +320,12 @@ impl NSTextField {
     }
 }
 
+impl Default for NSTextField {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// NSSlider wrapper for macOS.
 pub struct NSSlider {
     view: NSView,
@@ -314,10 +335,10 @@ impl NSSlider {
     /// Create a new NSSlider.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSSlider\0").unwrap();
-            let class = Class::get(class_name).expect("NSSlider class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSSlider";
+            let class = AnyClass::get(class_name).expect("NSSlider class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
             Self {
@@ -366,6 +387,12 @@ impl NSSlider {
     }
 }
 
+impl Default for NSSlider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// NSSwitch (NSButton with switch style) wrapper for macOS.
 pub struct NSSwitch {
     view: NSView,
@@ -375,10 +402,10 @@ impl NSSwitch {
     /// Create a new NSSwitch.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSButton\0").unwrap();
-            let class = Class::get(class_name).expect("NSButton class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSButton";
+            let class = AnyClass::get(class_name).expect("NSButton class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
             
@@ -434,6 +461,12 @@ impl NSSwitch {
     }
 }
 
+impl Default for NSSwitch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// NSProgressIndicator wrapper for macOS.
 pub struct NSProgressIndicator {
     view: NSView,
@@ -443,12 +476,13 @@ impl NSProgressIndicator {
     /// Create a new NSProgressIndicator.
     pub fn new() -> Self {
         unsafe {
-            use objc2::runtime::Class;
-            use std::ffi::CStr;
-            let class_name = CStr::from_bytes_with_nul(b"NSProgressIndicator\0").unwrap();
-            let class = Class::get(class_name).expect("NSProgressIndicator class");
+            use objc2::runtime::AnyClass;
+            
+            let class_name = c"NSProgressIndicator";
+            let class = AnyClass::get(class_name).expect("NSProgressIndicator class");
             let obj: *mut AnyObject = msg_send![class, alloc];
             let obj: *mut AnyObject = msg_send![obj, init];
+
             Self {
                 view: NSView { obj },
             }
@@ -509,6 +543,12 @@ impl NSProgressIndicator {
     /// Get the progress indicator's intrinsic content size.
     pub fn intrinsic_content_size(&self) -> (f64, f64) {
         self.view.intrinsic_content_size()
+    }
+}
+
+impl Default for NSProgressIndicator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

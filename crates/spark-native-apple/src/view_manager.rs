@@ -1,6 +1,6 @@
 //! View manager - manages native view hierarchy and lifecycle.
 
-use spark_layout::{WidgetId, ComputedLayout};
+use spark_layout::WidgetId;
 use std::collections::HashMap;
 use crate::NativeViewHandle;
 
@@ -28,18 +28,15 @@ impl ViewManager {
     pub fn register_widget(&mut self, widget_id: WidgetId, view_handle: NativeViewHandle) {
         // Make the view visible and set up for rendering
         #[cfg(target_os = "macos")]
-        match &view_handle {
-            crate::NativeViewHandle::AppKit(ptr) => {
-                unsafe {
-                    use crate::ffi::appkit::NSView;
-                    let view = NSView { obj: *ptr };
-                    view.set_visible(true);
-                    view.set_wants_layer(true);
-                    // Set a background color temporarily for debugging
-                    // view.set_background_color(1.0, 0.0, 0.0, 0.5); // Red with transparency
-                }
-            }
-            _ => {}
+        {
+            let crate::NativeViewHandle::AppKit(ptr) = &view_handle;
+            use crate::ffi::appkit::NSView;
+            // NSView wrapper creation is safe as it just wraps the pointer
+            let view = NSView { obj: *ptr };
+            view.set_visible(true);
+            view.set_wants_layer(true);
+            // Set a background color temporarily for debugging
+            // view.set_background_color(1.0, 0.0, 0.0, 0.5); // Red with transparency
         }
         
         self.views.insert(widget_id, view_handle);
@@ -56,12 +53,10 @@ impl ViewManager {
             match (child_handle, parent_handle) {
                 #[cfg(target_os = "macos")]
                 (NativeViewHandle::AppKit(child_ptr), NativeViewHandle::AppKit(parent_ptr)) => {
-                    unsafe {
-                        use crate::ffi::appkit::NSView;
-                        let child = NSView { obj: *child_ptr };
-                        let parent = NSView { obj: *parent_ptr };
-                        parent.add_subview(&child);
-                    }
+                    use crate::ffi::appkit::NSView;
+                    let child = NSView { obj: *child_ptr };
+                    let parent = NSView { obj: *parent_ptr };
+                    parent.add_subview(&child);
                 }
                 #[cfg(target_os = "ios")]
                 (NativeViewHandle::UIKit(child_ptr), NativeViewHandle::UIKit(parent_ptr)) => {
@@ -72,7 +67,6 @@ impl ViewManager {
                         parent.add_subview(&child);
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -89,11 +83,9 @@ impl ViewManager {
             match view_handle {
                 #[cfg(target_os = "macos")]
                 NativeViewHandle::AppKit(ptr) => {
-                    unsafe {
-                        use crate::ffi::appkit::NSView;
-                        let view = NSView { obj: ptr };
-                        view.remove_from_superview();
-                    }
+                    use crate::ffi::appkit::NSView;
+                    let view = NSView { obj: ptr };
+                    view.remove_from_superview();
                 }
                 #[cfg(target_os = "ios")]
                 NativeViewHandle::UIKit(ptr) => {
@@ -142,12 +134,10 @@ impl ViewManager {
             match (child_handle, parent_handle) {
                 #[cfg(target_os = "macos")]
                 (NativeViewHandle::AppKit(child_ptr), NativeViewHandle::AppKit(parent_ptr)) => {
-                    unsafe {
-                        use crate::ffi::appkit::NSView;
-                        let child = NSView { obj: *child_ptr };
-                        let parent = NSView { obj: *parent_ptr };
-                        parent.add_subview(&child);
-                    }
+                    use crate::ffi::appkit::NSView;
+                    let child = NSView { obj: *child_ptr };
+                    let parent = NSView { obj: *parent_ptr };
+                    parent.add_subview(&child);
                 }
                 #[cfg(target_os = "ios")]
                 (NativeViewHandle::UIKit(child_ptr), NativeViewHandle::UIKit(parent_ptr)) => {
@@ -158,6 +148,7 @@ impl ViewManager {
                         parent.add_subview(&child);
                     }
                 }
+                #[allow(unreachable_patterns)]
                 _ => {
                     // Mismatched platforms - shouldn't happen
                 }
@@ -168,12 +159,10 @@ impl ViewManager {
                 match (child_handle, root) {
                     #[cfg(target_os = "macos")]
                     (NativeViewHandle::AppKit(child_ptr), NativeViewHandle::AppKit(root_ptr)) => {
-                        unsafe {
-                            use crate::ffi::appkit::NSView;
-                            let child = NSView { obj: *child_ptr };
-                            let root = NSView { obj: *root_ptr };
-                            root.add_subview(&child);
-                        }
+                        use crate::ffi::appkit::NSView;
+                        let child = NSView { obj: *child_ptr };
+                        let root = NSView { obj: *root_ptr };
+                        root.add_subview(&child);
                     }
                     #[cfg(target_os = "ios")]
                     (NativeViewHandle::UIKit(child_ptr), NativeViewHandle::UIKit(root_ptr)) => {
@@ -184,6 +173,7 @@ impl ViewManager {
                             root.add_subview(&child);
                         }
                     }
+                    #[allow(unreachable_patterns)]
                     _ => {}
                 }
             }
@@ -209,19 +199,17 @@ impl ViewManager {
                 match view_handle {
                     #[cfg(target_os = "macos")]
                     crate::NativeViewHandle::AppKit(ptr) => {
-                        unsafe {
-                            use crate::ffi::appkit::NSView;
-                            let view = NSView { obj: *ptr };
-                            // Debug: log the frame being set (only for first few to avoid spam)
-                            if layouts.len() <= 3 {
-                                eprintln!("Setting native view frame: x={:.1}, y={:.1}, w={:.1}, h={:.1}, parent_height={:.1}, scale={:.1}", 
-                                    x, y, width, height, parent_height, scale_factor);
-                            }
-                            view.set_frame(x, y, width, height);
-                            // Ensure view is visible and bring to front
-                            view.set_visible(true);
-                            view.bring_to_front();
+                        use crate::ffi::appkit::NSView;
+                        let view = NSView { obj: *ptr };
+                        // Debug: log the frame being set (only for first few to avoid spam)
+                        if layouts.len() <= 3 {
+                            eprintln!("Setting native view frame: x={:.1}, y={:.1}, w={:.1}, h={:.1}, parent_height={:.1}, scale={:.1}", 
+                                x, y, width, height, parent_height, scale_factor);
                         }
+                        view.set_frame(x, y, width, height);
+                        // Ensure view is visible and bring to front
+                        view.set_visible(true);
+                        view.bring_to_front();
                     }
                     #[cfg(target_os = "ios")]
                     crate::NativeViewHandle::UIKit(ptr) => {

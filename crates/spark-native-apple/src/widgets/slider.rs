@@ -4,7 +4,6 @@ use spark_input::InputEvent;
 use spark_layout::{taffy, WidgetId};
 use spark_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
-use crate::NativeWidgetExt as _;
 
 /// Default minimum width for sliders (in logical pixels)
 const DEFAULT_MIN_SLIDER_WIDTH: f32 = 100.0;
@@ -46,6 +45,7 @@ impl NativeSlider {
         slider.update_native_values();
         slider
     }
+
 
     /// Set the minimum value.
     pub fn min_value(mut self, value: f64) -> Self {
@@ -102,7 +102,7 @@ impl NativeSlider {
     fn preferred_size(&self) -> (f32, f32) {
         #[cfg(target_os = "macos")]
         {
-            let (intrinsic_width, intrinsic_height) = self.slider.intrinsic_content_size();
+            let (_intrinsic_width, intrinsic_height) = self.slider.intrinsic_content_size();
             let height = if intrinsic_height > 0.0 {
                 intrinsic_height as f32
             } else {
@@ -118,6 +118,12 @@ impl NativeSlider {
         {
             (self.preferred_width, DEFAULT_MIN_SLIDER_HEIGHT)
         }
+    }
+}
+
+impl Default for NativeSlider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -4,7 +4,6 @@ use spark_input::InputEvent;
 use spark_layout::{taffy, WidgetId};
 use spark_widgets::{EventContext, EventResponse, LayoutContext, Widget};
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
-use crate::NativeWidgetExt as _;
 
 /// Default minimum width for switches (in logical pixels)
 const DEFAULT_MIN_SWITCH_WIDTH: f32 = 40.0;

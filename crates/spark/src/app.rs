@@ -182,8 +182,7 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
             widget: &mut dyn Widget,
             manager: &mut ViewManager,
         ) {
-            use std::any::{Any, TypeId};
-            use spark_native_apple::{NativeWidgetRegistration, widgets};
+
             
             let widget_id = widget.id();
             // Get children before we try to downcast (to avoid move issues)
@@ -282,6 +281,7 @@ impl<F: FnOnce() -> Box<dyn Widget>> AppRunner<F> {
         let queue_ptr = &state.queue as *const Queue;
 
         // Paint widgets (skip native widgets as they render themselves)
+        #[allow(clippy::too_many_arguments)]
         fn paint_widget(
             widget: &dyn Widget,
             layout_tree: &LayoutTree,
@@ -547,15 +547,16 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
             // Now get mutable access to manager
             if let Some(ref mut manager) = self.state.as_mut().unwrap().native_view_manager {
             // Embed native views into window - inline implementation
-            use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
             use objc2::runtime::AnyObject;
             use spark_native_apple::ffi::appkit::NSView;
             
             #[cfg(target_os = "macos")]
             {
                 // Get the raw window handle from winit
-                if let Ok(raw_handle) = window.raw_window_handle() {
-                    if let RawWindowHandle::AppKit(handle) = raw_handle {
+                if let Ok(handle_ref) = window.window_handle() {
+                     let raw_handle = handle_ref.as_raw();
+                     if let RawWindowHandle::AppKit(handle) = raw_handle {
                         unsafe {
                             // Get NSWindow from the handle
                             // The ns_view field contains the content view
@@ -570,16 +571,15 @@ impl<F: FnOnce() -> Box<dyn Widget>> winit::application::ApplicationHandler for 
                                 
                                 // Add all registered native views to the content view
                                 let view_count = manager.get_all_views().len();
-                                for (_widget_id, view_handle) in manager.get_all_views() {
-                                    if let spark_native_apple::NativeViewHandle::AppKit(ptr) = view_handle {
-                                        // Create NSView wrapper from pointer
-                                        let native_view = NSView::from_ptr(*ptr);
-                                        content_view.add_subview(&native_view);
-                                        native_view.set_visible(true);
-                                        native_view.set_wants_layer(true);
-                                        // Bring to front to ensure visibility
-                                        native_view.bring_to_front();
-                                    }
+                                for view_handle in manager.get_all_views().values() {
+                                    let spark_native_apple::NativeViewHandle::AppKit(ptr) = view_handle;
+                                    // Create NSView wrapper from pointer
+                                    let native_view = NSView::from_ptr(*ptr);
+                                    content_view.add_subview(&native_view);
+                                    native_view.set_visible(true);
+                                    native_view.set_wants_layer(true);
+                                    // Bring to front to ensure visibility
+                                    native_view.bring_to_front();
                                 }
                                 
                                 eprintln!("Embedded {} native views into window content view", view_count);

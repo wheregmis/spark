@@ -1,7 +1,6 @@
 //! Native view container widget (NSView on macOS, UIView on iOS).
 
 use crate::native_widget::{NativeViewHandle, NativeWidget, NativeWidgetExt};
-use crate::NativeWidgetExt as _;
 use spark_input::InputEvent;
 use spark_layout::{taffy, WidgetId};
 use spark_widgets::{EventContext, EventResponse, PaintContext, Widget};
@@ -112,5 +111,10 @@ impl NativeWidget for NativeView {
 impl NativeWidgetExt for NativeView {
     fn handle_event(&mut self, _ctx: &mut EventContext, _event: &InputEvent) -> EventResponse {
         EventResponse::default()
+    }
+}
+impl Default for NativeView {
+    fn default() -> Self {
+        Self::new()
     }
 }

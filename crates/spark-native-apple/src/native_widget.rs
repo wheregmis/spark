@@ -1,8 +1,8 @@
 //! Base trait and types for native widgets.
 
 use spark_input::InputEvent;
-use spark_layout::{taffy, WidgetId};
-use spark_widgets::{EventContext, EventResponse, PaintContext, Widget};
+use spark_layout::taffy;
+use spark_widgets::{EventContext, EventResponse, Widget};
 
 /// Handle to a native view (platform-specific).
 #[derive(Clone, Debug)]
